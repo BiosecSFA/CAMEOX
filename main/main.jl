@@ -48,7 +48,7 @@ Arguments:
 						set the range to be something like 150:151. Generally some buffer around this value (i.e. 150:160) is useful.
 						Don't set, or set to false if you don't care where the genes overlap.
 """
-function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm, pop_size, frame, max_iter, X_range=false, Y_range=false; rand_weights = true, actually_mrf = true)
+function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, X_range=false, Y_range=false; rand_weights = true, actually_mrf = true)
 
 	@debug("Beginning run.")
 	@debug(Libc.strftime(time()))
@@ -144,10 +144,12 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			#So now everything is in an extended chromosome object.
 
 			changed_seq = length(cur_pop)
+            rel_changed_seq = 1.0
 			no_change_iters = 0
 			iter = 0;
 
 			#Let's keep track of optimization history.
+            max_iter = 5000  # TO DO: Calculate a better limit (this was an input parameter in CAMEOS)
 			history_matrix = zeros(Float32, round(Int64, pop_size * 1.2), max_iter)
 
 			println("Beginning long-range optimization.")
@@ -165,17 +167,17 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			mark_energy_normal = Normal(mark_energy_mu, mark_energy_sig)
 			deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
 
-			while (iter == 0 || (iter < max_iter)) #&& !(stop_early) # && minimum((fitness_values)) > 400 && no_change_iters < 100)
+			while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400 && no_change_iters < 100)
 				sfv = sort(fitness_values)
 				#best_50 = sfv[50]
 
 				if iter % 50 == 0
-					println("Step $(iter) of $(max_iter)...")
+					println("Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]...")
 				end
-				@debug("Iteration $iter out of $max_iter")
-				@debug("Mean fitness is: $(mean((fitness_values)))")
-				@debug("Bottom five are $(sfv[1:5])")
-				@debug("... and top five are $(sfv[end-5:end]).")
+				@debug("Iteration $iter: $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]")
+				@debug("Mean fitness was: $(mean((fitness_values)))")
+				@debug("Bottom five were $(sfv[1:5])")
+				@debug("... and top five were $(sfv[end-5:end]).")
 				@debug("Number of sequences that were changed: $changed_seq")
 				flush(log_io)
 
@@ -238,6 +240,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 				else
 					no_change_iters = 0
 				end
+                rel_changed_seq = changed_seq/length(success_chrom)
 				iter += 1
 				@debug("\n")
 			end
@@ -372,6 +375,7 @@ function parse_commandline()
 end
 
 function run_file()
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.1 - Jul 2021 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
@@ -400,7 +404,7 @@ function run_file()
                 rand_barcode = Random.randstring()
 				try
 					run_args = split(line, "\t")
-					out_dir, short, long, short_jld, long_jld, short_hmm, long_hmm, pop_size, frame, num_iter = run_args
+					out_dir, short, long, short_jld, long_jld, short_hmm, long_hmm, pop_size, frame, rel_change_thr = run_args
                     
 					the_out_path = "$out_dir/$(short)_$(long)_$frame/"
 					if !(isdir(the_out_path))
@@ -414,8 +418,13 @@ function run_file()
 
 					with_logger(logger) do
 						pop_size = parse(Int64, pop_size)
-						num_iter = parse(Int64, num_iter)
-						set_up_and_optimize(log_io, rand_barcode, out_dir, short, long, short_jld, long_jld, short_hmm, long_hmm, pop_size, frame, num_iter)
+						rel_change_thr = parse(Float64, rel_change_thr)
+						set_up_and_optimize(log_io, rand_barcode, out_dir,
+                                            short, long,
+                                            short_jld, long_jld,
+                                            short_hmm, long_hmm,
+                                            pop_size, frame,
+                                            rel_change_thr)
 					end
 
 					flush(log_io)
