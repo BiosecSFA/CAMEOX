@@ -182,13 +182,13 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 				#iterated conditional modes, multi-site keep-track = icm_multi_kt. keep track = store values of changes to sequence.
 				if do_cull
 					if iter < div(max_iter, 4)
-						#println("$iter : no cutoff")
+						@debug("Cull for iter $iter : no cutoff")
 						cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel) #, deg_energy_normal, mark_energy_normal)
 					elseif iter >= div(max_iter, 4) && iter < div(max_iter, 2)
-						#println("$iter : cutoff is $(sfv[div(length(sfv), 2)])")
+						@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 2)])")
 						cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 2)])
 					elseif iter >= div(max_iter, 2)
-						#println("$iter : cutoff is $(sfv[div(length(sfv), 4)])")
+						@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 4)])")
 						cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 4)])
 					end
 				else
@@ -391,18 +391,17 @@ function run_file()
 		close(in_file)
 
 		#This is an additional file that records errors independent of individual log files.
-		problem_file = open("problem_runs_$(run_i).txt", "w")
+		problem_file = open("problem_runs_$(run_i).txt", "a")
 
 		line_count = 0
 		for line in in_read #
 			line_count += 1
 			if line[1] != '#' && (line_count % NUM_THREADS == run_i)
+                rand_barcode = Random.randstring()
 				try
 					run_args = split(line, "\t")
 					out_dir, short, long, short_jld, long_jld, short_hmm, long_hmm, pop_size, frame, num_iter = run_args
-
-					rand_barcode = Random.randstring()
-
+                    
 					the_out_path = "$out_dir/$(short)_$(long)_$frame/"
 					if !(isdir(the_out_path))
 						run(`mkdir -p $the_out_path`)
@@ -422,7 +421,9 @@ function run_file()
 					flush(log_io)
 					close(log_io)
 				catch y
-					write(problem_file, "Problem $y processing line: $line")
+					write(problem_file, "BC $rand_barcode ==> Problem $y processing line: $line\n")
+                    flush(problem_file)
+                    close(problem_file)  # Remove if rethrow removed below
                     rethrow()
 				end
 			end
