@@ -188,7 +188,7 @@ end
 
 function NST_full_general_main(x_prot, x_hmm, y_prot, y_hmm, frame, num_samples, prob_thresh, soft_temp, soft_temp_start, abs_bad, fin_x_nuc="", fin_x_prot="", fin_y_nuc="", fin_y_prot="")
 	gen_bbt, X_hmm_obj, Y_hmm_obj, X_len, Y_len, x_prot_seq, y_prot_seq, mark_nuc, deg_nuc = CAMEOS_main(x_hmm, x_prot, y_hmm, y_prot, frame, true)
-	println("CAMEOS tensor built")
+	println("INFO:std_setup:NST_full_general_main(): CAMEOX tensor built")
 	cumulative_score = 0.0
 	failures = 0
 	success_count = 0
@@ -238,7 +238,7 @@ end
 function NST_full_general_main_range(x_prot, x_hmm, y_prot, y_hmm, frame, num_samples, prob_thresh, soft_temp, soft_temp_start, abs_bad, x_range, y_range, fin_x_nuc="", fin_x_prot="", fin_y_nuc="", fin_y_prot="")
 	#This function only goes through a single range.
 	gen_bbt, X_hmm_obj, Y_hmm_obj, X_len, Y_len, x_prot_seq, y_prot_seq, mark_nuc, deg_nuc = CAMEOS_main(x_hmm, x_prot, y_hmm, y_prot, frame, true)
-	println("CAMEOS tensor built")
+	println("INFO:std_setup:NST_full_general_main_range(): CAMEOX tensor built")
 	cumulative_score = 0.0
 	failures = 0
 	success_count = 0
@@ -465,8 +465,8 @@ end
 function full_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem, pop_size, num_samples, bad_threshold, rand_barcode, frame="p1")
 	my_prots = NST_full_general_main(mark_name, mark_hmm, deg_name, deg_hmm, frame, pop_size * 50, 0.90, 1.0, 1.0, 1200, gen_hmm_trace(mark_name, mark_hmm)..., gen_hmm_trace(deg_name, deg_hmm)...)
 
-	println("Evaluating HMM seeds")
-	@debug("We've generated samples.")
+	println("INFO:std_setup:full_set_up(): Evaluating HMM seeds...")
+	@debug("std_setup:full_set_up(): We've generated samples.")
 
 	sample_count = 1
 	mark_sub_prots = Dict{Int64, String}()
@@ -501,8 +501,10 @@ function full_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm
 	write(mark_out_file, "$(join(mark_lines))")
 	close(mark_out_file)
 
-	deg_hmm_run = read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl $deg_hmm $out_path/$(mark_name)_$(deg_name)_$frame/deg_out_$(rand_barcode).fa `), String)
-	mark_hmm_run= read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/mark_$(rand_barcode).tbl $mark_hmm $out_path/$(mark_name)_$(deg_name)_$frame/mark_out_$(rand_barcode).fa `), String)
+    @sync begin
+        @async deg_hmm_run = read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl $deg_hmm $out_path/$(mark_name)_$(deg_name)_$frame/deg_out_$(rand_barcode).fa `), String)
+	    @async mark_hmm_run= read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/mark_$(rand_barcode).tbl $mark_hmm $out_path/$(mark_name)_$(deg_name)_$frame/mark_out_$(rand_barcode).fa `), String)
+    end
 
 	#Okay now read the results and see which samples are top quality.
 	deg_in_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl")
