@@ -214,7 +214,7 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 	deg_seqs = AbstractString[]
 	mark_psls = Float32[]
 	deg_psls = Float32[]
-	changed_seq = 0
+	changed_seq = Threads.Atomic{Int}(0)
 	iss = Any[]
 	deg_w1 = deg_grem.w1
 	deg_w2 = deg_grem.w2
@@ -223,11 +223,9 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 	mark_w2 = mark_grem.w2
 	mark_nNodes = mark_grem.nNodes
 
-	the_debug_counter = 0
-	for individual in population
-		the_debug_counter += 1
+	Threads.@threads for (idx, individual) in collect(enumerate(population))
 		if div(length(individual.deg_vec), 21) != deg_nNodes || div(length(individual.mark_vec), 21) != mark_nNodes
-			@debug("Trouble with individual $the_debug_counter at icm_mlti_kt")
+			@debug("WARNING! Trouble with individual $idx at optimize.icm_mlti_kt(). Skipping...")
 			continue
 		end
 
@@ -343,7 +341,7 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			new_seq = ind_seq[1:(site - 1)] * mut_dna_options[min_choice] * ind_seq[(site + mut_len):end]
 
 			if new_seq != ind_seq
-				changed_seq += 1
+				Threads.atomic_add!(changed_seq, 1)
 			end
 
 			new_deg_dna = new_seq[individual.deg_trns:individual.deg_trne]
@@ -367,7 +365,7 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 
 		end
 	end
-	return population, changed_seq
+	return population, changed_seq[]
 end
 
 function mask_prot(prot_vec, region)

@@ -375,7 +375,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.1 - Jul 2021 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.2 - Jul 2021 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
