@@ -103,6 +103,8 @@ mutable struct ExChrome #extended chromosome.
 	mark_pv_w2::Array{Float32, 2}
 
 	first_weight::Float32
+
+    unchanged::UInt16
 end
 
 mutable struct SaveChrome #extended chromosome in saveable form (discard matrices which are easily re-calculable)

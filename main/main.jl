@@ -54,7 +54,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 	@debug(Libc.strftime(time()))
 	@debug(Libc.strftime(time()))
 
-	println("The random barcode on this run is: $rand_barcode")
+	println("IMPORTANT: The random barcode on this run is: $rand_barcode")
 	@debug("The random barcode on this run is: $rand_barcode")
 
 	do_cull = false #culling reduces number of sequences we optimize over time. Just a trick to save time if you want top-performers only.
@@ -120,17 +120,19 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			cur_pop = types.ExChrome[]
 			for i in 1:length(success_chrom)
 				old = success_chrom[i]
-				if rand_weights
-					new_chrom = types.ExChrome(old.path, old.full_sequence, old.deg_nuc, indie_deg_maps[i], old.deg_trns, old.deg_trne,
-															old.deg_d, old.deg_skip, old.deg_insert, old.mark_nuc, indie_mark_maps[i], old.mark_trns, old.mark_trne,
-															old.mark_d, old.mark_skip, old.mark_insert, fdp[i], deg_base_energy, deg_prot_mat[i:i, 1:end], utils.aa_vec_to_seq(deg_prot_mat[i:i, 1:end]), deg_ull[i], deg_pv_w1[i], deg_pv_w2[i:i, 1:end], fmp[i], mark_base_energy,
-															mark_prot_mat[i:i, 1:end], utils.aa_vec_to_seq(mark_prot_mat[i:i, 1:end]), mark_ull[i], mark_pv_w1[i], mark_pv_w2[i:i, 1:end], rand())
-				else
-					new_chrom = types.ExChrome(old.path, old.full_sequence, old.deg_nuc, indie_deg_maps[i], old.deg_trns, old.deg_trne,
-															old.deg_d, old.deg_skip, old.deg_insert, old.mark_nuc, indie_mark_maps[i], old.mark_trns, old.mark_trne,
-															old.mark_d, old.mark_skip, old.mark_insert, fdp[i], deg_base_energy, deg_prot_mat[i:i, 1:end], utils.aa_vec_to_seq(deg_prot_mat[i:i, 1:end]), deg_ull[i], deg_pv_w1[i], deg_pv_w2[i:i, 1:end], fmp[i], mark_base_energy,
-															mark_prot_mat[i:i, 1:end], utils.aa_vec_to_seq(mark_prot_mat[i:i, 1:end]), mark_ull[i], mark_pv_w1[i], mark_pv_w2[i:i, 1:end], 0.5)
-				end
+				new_chrom = types.ExChrome(
+                    old.path, old.full_sequence, old.deg_nuc, indie_deg_maps[i],
+                    old.deg_trns, old.deg_trne, old.deg_d, old.deg_skip,
+                    old.deg_insert, old.mark_nuc, indie_mark_maps[i],
+                    old.mark_trns, old.mark_trne, old.mark_d, old.mark_skip,
+                    old.mark_insert, fdp[i], deg_base_energy,
+                    deg_prot_mat[i:i, 1:end],
+                    utils.aa_vec_to_seq(deg_prot_mat[i:i, 1:end]),
+                    deg_ull[i], deg_pv_w1[i], deg_pv_w2[i:i, 1:end], fmp[i],
+                    mark_base_energy, mark_prot_mat[i:i, 1:end],
+                    utils.aa_vec_to_seq(mark_prot_mat[i:i, 1:end]), mark_ull[i],
+                    mark_pv_w1[i], mark_pv_w2[i:i, 1:end],
+                    rand_weights ? rand() : 0.5, 0)
 				push!(cur_pop, new_chrom)
 			end
 
@@ -166,19 +168,22 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 
 			mark_energy_normal = Normal(mark_energy_mu, mark_energy_sig)
 			deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
-
+            
+			done_pop = types.ExChrome[]
+            unchanged_threshold::UInt16 = 1000  # Constant with the threshold for contiguous iterations to consider a seq will not change 
+            
 			while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400 && no_change_iters < 100)
 				sfv = sort(fitness_values)
 				#best_50 = sfv[50]
 
-				if iter % 50 == 0
-					println("Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]...")
+				if iter % 25 == 0
+					println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]...")
 				end
-				@debug("Iteration $iter: $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]")
-				@debug("Mean fitness was: $(mean((fitness_values)))")
-				@debug("Bottom five were $(sfv[1:5])")
-				@debug("... and top five were $(sfv[end-5:end]).")
-				@debug("Number of sequences that were changed: $changed_seq")
+				@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
+				@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
+				@debug("  Best five were $(sfv[1:5])")
+				@debug("  ... and worse five were $(sfv[end-5:end]).")
+
 				flush(log_io)
 
 				#iterated conditional modes, multi-site keep-track = icm_multi_kt. keep track = store values of changes to sequence.
@@ -197,12 +202,17 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel)
 				end
 
-				fitness_values = optimize.assess_pop(cur_pop)
+				fitness_values = optimize.assess_pop([done_pop; cur_pop])
 				summed_fitness = sum(fitness_values) #one of the things we should be watching.
 
 				push!(last_few_sf, summed_fitness)
 				push!(last_few_cs, changed_seq)
 
+                tmp_done_pop = types.ExChrome[]
+                tmp_done_pop = filter(v->v.unchanged>unchanged_threshold, cur_pop)
+                append!(done_pop, tmp_done_pop)
+                filter!(v->v.unchanged<=unchanged_threshold, cur_pop)
+                
 				indiv_count = 1
 				for indiv in fitness_values #history matrix stores values of function being optimized over time.
 					history_matrix[indiv_count, iter + 1] = indiv
@@ -216,7 +226,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 					for i_count in 1:5
 						#for the record this is not a good way to generate random numbers.
 						#doesn't go from 1 to end.
-						i = i_count #round(Int64, rand() * (length(cur_pop) - 1) + 1)
+						i = round(Int64, rand() * (length(cur_pop) - 1) + 1) # it was just = i_count
 
 						bel_deg = cur_pop[i].deg_prob
 						bel_mrk = cur_pop[i].mark_prob
@@ -244,10 +254,14 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 				iter += 1
 				@debug("\n")
 			end
-
+          
 			#So we're done the iterated conditional modes step. Now we report everything...
 			@debug("Done while loop...")
 			@debug(Libc.strftime(time()))
+
+            # Retrieve the remaining variants (if any) what were set to keep processing
+            append!(done_pop, cur_pop)
+            cur_pop = done_pop
 
 			@debug("Let us save the history matrix!")
 			save("$out_path/$(mark_name)_$(deg_name)_$frame/opt_his_mat_$(rand_barcode).jld", "hist_mat", history_matrix)
@@ -375,7 +389,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.2 - Jul 2021 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.3 - Jul 2021 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]

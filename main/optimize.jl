@@ -229,6 +229,11 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			continue
 		end
 
+        #if individual.unchanged > 2  #skip after seq remains the same for last iters
+            #@debug("INFO: Skipping seq #$idx after $(individual.unchanged) times unchanged!")
+            #continue
+        #end
+        
 		if score_cutoff != 0 && (abs(individual.deg_prob) + abs(individual.mark_prob)) > score_cutoff #we can choose to only optimize individuals below a score cut-off past a certain point of optimization.
 			continue #we skip this guy, the sequence stops changing.
 		end
@@ -342,6 +347,9 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 
 			if new_seq != ind_seq
 				Threads.atomic_add!(changed_seq, 1)
+                individual.unchanged == 0  # Reset to 0 since the seq changed
+            else
+                individual.unchanged += 1  # Seq unchanged
 			end
 
 			new_deg_dna = new_seq[individual.deg_trns:individual.deg_trne]
