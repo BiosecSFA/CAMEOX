@@ -170,7 +170,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
             
 			done_pop = types.ExChrome[]
-            unchanged_threshold::UInt16 = 1000  # Constant with the threshold for contiguous iterations to consider a seq will not change 
+            unchanged_threshold::UInt16 = 1000  # Constant with the threshold for contiguous iterations without change to drop a seq from further optimization 
             
 			while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400 && no_change_iters < 100)
 				sfv = sort(fitness_values)
@@ -223,7 +223,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 				#Now it's still sorta somewhat useful to log a few values of sequences in both deg/mark as optimization goes.
 				if (mod(iter, 50) == 0 && iter != 0)
 					@debug("Second opinion, these should be ~0.")
-					for i_count in 1:5
+					for i_count in 1:min(5, length(cur_pop))
 						#for the record this is not a good way to generate random numbers.
 						#doesn't go from 1 to end.
 						i = round(Int64, rand() * (length(cur_pop) - 1) + 1) # it was just = i_count
@@ -256,7 +256,8 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			end
           
 			#So we're done the iterated conditional modes step. Now we report everything...
-			@debug("Done while loop...")
+            println("INFO: Optimization completed after iter $iter with $(rel_changed_seq*100)% changed seqs")
+			@debug("Done while loop after iter $iter with $(rel_changed_seq*100)% changed seqs!")
 			@debug(Libc.strftime(time()))
 
             # Retrieve the remaining variants (if any) what were set to keep processing
