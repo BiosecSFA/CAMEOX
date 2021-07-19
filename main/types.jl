@@ -133,7 +133,8 @@ mutable struct SaveChrome #extended chromosome in saveable form (discard matrice
 	#deg_ull::Float32
 	#deg_pv_w1::Float32
 	#deg_pv_w2::Array{Float32, 2}
-
+    deg_aplln::Float32
+    
 	mark_prob::Float32
 	mark_base_E::Float32
 	#mark_vec
@@ -141,7 +142,8 @@ mutable struct SaveChrome #extended chromosome in saveable form (discard matrice
 	#mark_ull::Float32
 	#mark_pv_w1::Float32
 	#mark_pv_w2::Array{Float32, 2}
-
+    mark_aplln::Float32
+    
 	first_weight::Float32
 end
 

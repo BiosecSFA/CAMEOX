@@ -15,7 +15,7 @@ include("bio_seq.jl")
 include("utils.jl")
 
 function debug(x)
-	println("DEBUG: $x")
+	@debug("module mrf: $x")
 end
 
 function err(x)

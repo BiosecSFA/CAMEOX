@@ -15,17 +15,21 @@ include("bio_seq.jl")
 
 using ArgParse, Logging, JLD, StatsBase, Distributions, Random, Statistics
 
-function convert_to_saveable(cur_pop)
+"""
+Aux: Get a JLD saveable population of variants
+"""
+function population_to_saveable(cur_pop;
+                                deg_wt_apll::Float32=0, mark_wt_apll::Float32=0)
 	new_pop = types.SaveChrome[]
 
 	for indiv in cur_pop
 		push!(new_pop, types.SaveChrome(indiv.path, indiv.full_sequence,
 										indiv.deg_nuc, indiv.deg_map, indiv.deg_trns, indiv.deg_trne, indiv.deg_d, indiv.deg_skip, indiv.deg_insert,
 										indiv.mark_nuc, indiv.mark_map, indiv.mark_trns, indiv.mark_trne, indiv.mark_d, indiv.mark_skip, indiv.mark_insert,
-										indiv.deg_prob, indiv.deg_base_E, indiv.deg_seq,
-										indiv.mark_prob, indiv.mark_base_E, indiv.mark_seq, indiv.first_weight))
+										indiv.deg_prob, indiv.deg_base_E, indiv.deg_seq, indiv.deg_prob-deg_wt_apll, 
+										indiv.mark_prob, indiv.mark_base_E, indiv.mark_seq, indiv.mark_prob-mark_wt_apll,
+                                        indiv.first_weight))
 	end
-
 	return new_pop
 end
 
@@ -90,19 +94,19 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
 		end
 
-        # Write pseudolikelihood for WT sequences
-        write_psls_wt = true
-        if write_psls_wt
+        # Get (anti)pseudolikelihood for WT sequences
+        write_apll_wt = true
+        if write_apll_wt
 	        prot_seqs = bio_seq.load_fasta("proteins.fasta")
 	        local deg_seq, mark_seq
-	        deg_seq = prot_seqs[deg_name]
 	        mark_seq = prot_seqs[mark_name]
-            println("$deg_name seq: $deg_seq")
-            psl_deg = mrf.psl(strip(deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, true)
-            println("$deg_name APLL: $psl_deg")            
-            println("$mark_name seq: $mark_seq")
-            psl_mark = mrf.psl(strip(mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, true)
-            println("$mark_name APLL: $psl_mark")                       
+            @debug("$mark_name seq: $mark_seq")
+            mark_wt_apll::Float32 = mrf.psl(strip(mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, true)
+            @debug("$mark_name APLL: $mark_wt_apll")                       
+	        deg_seq = prot_seqs[deg_name]
+            @debug("$deg_name seq: $deg_seq")
+            deg_wt_apll::Float32 = mrf.psl(strip(deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, true)
+            @debug("$deg_name APLL: $deg_wt_apll")            
         end
 
 		#Look through generated candidates, check their fitness values and their correctness.
@@ -263,7 +267,16 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
             # Retrieve the remaining variants (if any) what were set to keep processing
             append!(done_pop, cur_pop)
             cur_pop = done_pop
+            
+            # Recalculate fitness for all the population and show stats
+			fitness_values = optimize.assess_pop(cur_pop)
+			sfv = sort(fitness_values)
+			@debug("FINAL iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
+			@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
+			@debug("  Best five are $(sfv[1:5])")
+			@debug("  ... and worse five are $(sfv[end-5:end]).")
 
+            # History matrix
 			@debug("Let us save the history matrix!")
 			save("$out_path/$(mark_name)_$(deg_name)_$frame/opt_his_mat_$(rand_barcode).jld", "hist_mat", history_matrix)
 
@@ -324,10 +337,12 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			@debug(Libc.strftime(time()))
 			if true #deg_significance && mark_significance
 				@debug("Let's save our optimized population...")
-				saved_pop = convert_to_saveable(cur_pop)
+				saved_pop = population_to_saveable(cur_pop;
+                                                   mark_wt_apll=mark_wt_apll,
+                                                   deg_wt_apll=deg_wt_apll)
 				save("$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld", "variants", saved_pop)
 			else #We want just a subset.
-				@debug("We'll save 12 interesting members of the population.")
+				@debug("We'll save 12 interesting members of the population...")
 				selected_pop = ExChrome[]
 				for ijk in 1:3
 					push!(selected_pop, cur_pop[cal_deg_p[ijk]])
@@ -364,8 +379,18 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 				write(out_file, "$(cur_pop[deg_ind].mark_seq)\n")
 			end
 			close(out_file)
-		end
 
+            @debug("Finally, we'll save some metadata of the run...")
+            metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
+            if !isfile(metadata_filename)
+			    out_file = open(metadata_filename, "w")  
+			    write(out_file, "#rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,rand_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iter,max_iter,sfv[1],sfv[end],mean(fitness),std(fitness)\n") #,psl_mark,psl_deg\n")
+            else
+			    out_file = open(metadata_filename, "a")                
+            end
+            write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(rand_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values)))\n")
+            close(out_file)
+        end
 		@debug("REALLY DONE!")
 
 		@debug(Libc.strftime(time()))
@@ -390,7 +415,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.3 - Jul 2021 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.4 - Jul 2021 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
