@@ -384,7 +384,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
             metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
             if !isfile(metadata_filename)
 			    out_file = open(metadata_filename, "w")  
-			    write(out_file, "#rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,rand_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iter,max_iter,sfv[1],sfv[end],mean(fitness),std(fitness)\n") #,psl_mark,psl_deg\n")
+			    write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,rand_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness\n") 
             else
 			    out_file = open(metadata_filename, "a")                
             end
