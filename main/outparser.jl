@@ -1,5 +1,5 @@
 """
-outparser: CAMEOS output parser
+outparser: CAMEOX output parser
 """
 
 using JLD # Should be placed here too to avoid later crash loading JLD file
@@ -23,11 +23,11 @@ function parse_commandline()
             arg_type = String
 			default = "infA"
 		"runid"
-			help = "3rd positional argument, run id code created by CAMEOS"
+			help = "3rd positional argument, run id code created by CAMEOX"
             arg_type = String
             default = "LgolUs7k"
         "--frame"
-			help = "optional argument, CAMEOS frame"
+			help = "optional argument, CAMEOX frame"
             arg_type = String
 		    default = "p1"     
         "--fasta"
@@ -38,7 +38,7 @@ function parse_commandline()
 end
 
 function outparse_cameos()
-    println("=-= CAMEOS output parser =-= v0.5 - Jun 2021 =-= by LLNL =-=")
+    println("=-= CAMEOX output parser =-= v0.6 - Jul 2021 =-= by LLNL =-=")
 
     # Parse arguments
    	parsed_args = parse_commandline()
@@ -105,7 +105,7 @@ function outparse_cameos()
 
                 # Prints header
                 if hdrverb
-                    println(io, ">CAMEOS run:", runid,
+                    println(io, ">CAMEOX run:", runid,
                             " mark_gene:", mark_gene,
                             " deg_gene:", deg_gene,
                             " variant:", variant, "/", parsed,
