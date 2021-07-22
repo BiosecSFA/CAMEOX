@@ -99,13 +99,19 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
         if write_apll_wt
 	        prot_seqs = bio_seq.load_fasta("proteins.fasta")
 	        local deg_seq, mark_seq
+            # For mark
 	        mark_seq = prot_seqs[mark_name]
             @debug("$mark_name seq: $mark_seq")
-            mark_wt_apll::Float32 = mrf.psl(strip(mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, true)
+            mark_ali_seq = uppercase(std_setup.align_consensus(mark_seq, mark_hmm))
+            @debug("$mark_name aligned seq: $mark_ali_seq")            
+            mark_wt_apll::Float32 = mrf.psl(strip(mark_ali_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, true)
             @debug("$mark_name APLL: $mark_wt_apll")                       
+            # For deg
 	        deg_seq = prot_seqs[deg_name]
             @debug("$deg_name seq: $deg_seq")
-            deg_wt_apll::Float32 = mrf.psl(strip(deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, true)
+            deg_ali_seq = uppercase(std_setup.align_consensus(deg_seq, deg_hmm))
+            @debug("$deg_name aligned seq: $deg_ali_seq")              
+            deg_wt_apll::Float32 = mrf.psl(strip(deg_ali_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, true)
             @debug("$deg_name APLL: $deg_wt_apll")            
         end
 
@@ -415,7 +421,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.4 - Jul 2021 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.5 - Jul 2021 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
