@@ -3,6 +3,8 @@ hmm_logic : logic associated with dealing with Hidden Markov Models and
 associated files, as well as construction of internal versions of this model.
 """
 
+include("host.jl")
+
 using BioAlignments, BioSymbols, Unicode
 
 islower(s) = all(c->islowercase(c) | isspace(c), s);
@@ -19,6 +21,7 @@ INF_NEG = -1e12
 
 global bases
 bases = ["A", "C", "G", "T"]
+
 
 function get_hmm_len(hmm_file)
 	out_stats = read(pipeline(`hmmstat $hmm_file`), String)
@@ -145,17 +148,14 @@ function create_HMM(file_name)
 	return hmm_length, state_probs, insert_aa_probs, match_aa_probs
 end
 
-function load_hmm_seq(prot_name, hmm, hmm_len)
-	prot_dict = Dict{AbstractString, AbstractString}(prot_name => hmm_get_consensus(hmm, hmm_len))
-	nucl_dict = Dict{AbstractString, AbstractString}(prot_name => optimize_codons(prot_dict[prot_name]))
+#
+function load_hmm_seq(prot_name, hmm, hmm_len, myhost)
+	prot_dict = Dict{AbstractString, AbstractString}(
+        prot_name => hmm_get_consensus(hmm, hmm_len))
+	nucl_dict = Dict{AbstractString, AbstractString}(
+        prot_name => host.optimize_codons(myhost, prot_dict[prot_name]))
 	return prot_dict, nucl_dict
 end
-
-top_codon = Dict{Char, AbstractString}('A'=>"GCG", 'C'=>"TGC", 'D'=>"GAC", 'E'=>"GAA", 'F'=>"TTT",
-																							'G'=>"GGT", 'H'=>"CAT", 'I'=>"ATT", 'K'=>"AAA", 'L'=>"CTG",
-																							'M'=>"ATG", 'N'=>"AAC", 'P'=>"CCG", 'Q'=>"CAG", 'R'=>"CGT",
-																							'S'=>"AGC", 'T'=>"ACC", 'V'=>"GTG", 'W'=>"TGG", 'Y'=>"TAT")
-
 
 function get_hmm_consensus(hmm_file) #NOTE: extra dependency (hmmemit)
 	hmm_con = read(`hmmemit -c $hmm_file`, String)
@@ -405,7 +405,7 @@ end
 #Basically we also find it useful to trace the protein sequence to the hmm.
 #We want wild-type sequence for non-overlapping regions, and we want to align it to hmm because hmm is sort of our "base positioning"
 #of the models we're constructing.
-function gen_hmm_trace(gene_name, gene_hmm)
+function gen_hmm_trace(gene_name, gene_hmm, myhost)
 	cds_seqs = bio_seq.load_fasta("cds.fasta")
 	prot_seqs = bio_seq.load_fasta("proteins.fasta")
 
@@ -456,7 +456,7 @@ function gen_hmm_trace(gene_name, gene_hmm)
 				cds_count += 1
 			elseif aa_count in keys(to_add)
 				push!(final_aas, to_add[aa_count])
-				push!(final_codons, top_codon[to_add[aa_count]])
+				push!(final_codons, host.optimize_codons(host, to_add[aa_count]))
 				#we don't iterate on cds_count because we haven't added natural codons.
 			end
 		end
@@ -466,15 +466,6 @@ function gen_hmm_trace(gene_name, gene_hmm)
 	final_cds = join(final_codons)
 	final_prot_seq = join(final_aas)
 	return final_cds, final_prot_seq
-end
-
-function optimize_codons(sequence::AbstractString)
-	#most popular codons taken from first table at http://openwetware.org/wiki/Escherichia_coli/Codon_usage [super simple way to find codons, not claiming it's very smart]
-	most_popular = Dict{Char, AbstractString}('G' => "GGC", 'E' => "GAA", 'D' => "GAT", 'V' => "GTG", 'A' => "GCG",
-                  'R' => "CGC", 'K' => "AAA", 'N' => "AAC", 'M' => "ATG", 'I' => "ATT",
-                  'T' => "ACC", 'W' => "TGG", 'C' => "TGC", '*' => "TAA", 'F' => "TTT",
-                  'S' => "AGC", 'Q' => "CAG", 'H' => "CAT", 'L' => "CTG", 'P' => "CCG", 'Y'=>"TAT")
-	return join([most_popular[aa] for aa in sequence])
 end
 
 function top_n(el_tuple, val_keys)

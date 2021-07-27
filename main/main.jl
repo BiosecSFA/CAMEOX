@@ -12,6 +12,7 @@ include("math.jl")
 include("optimize.jl")
 include("mrf.jl")
 include("bio_seq.jl")
+#include("host.jl")
 
 using ArgParse, Logging, JLD, StatsBase, Distributions, Random, Statistics
 
@@ -52,7 +53,10 @@ Arguments:
 						set the range to be something like 150:151. Generally some buffer around this value (i.e. 150:160) is useful.
 						Don't set, or set to false if you don't care where the genes overlap.
 """
-function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, X_range=false, Y_range=false; rand_weights = true, actually_mrf = true)
+function set_up_and_optimize(
+    log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
+    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, host_tid=562,
+    X_range=false, Y_range=false; rand_weights = true, actually_mrf = true)
 
 	@debug("Beginning run.")
 	@debug(Libc.strftime(time()))
@@ -60,6 +64,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 
 	println("IMPORTANT: The random barcode on this run is: $rand_barcode")
 	@debug("The random barcode on this run is: $rand_barcode")
+	@debug("The host taxid for this run is: $host_tid")
 
 	do_cull = false #culling reduces number of sequences we optimize over time. Just a trick to save time if you want top-performers only.
 	full_even_window = 20
@@ -85,7 +90,7 @@ function set_up_and_optimize(log_io, rand_barcode, out_path, mark_name, deg_name
 			#Generate population of sampled hmm starting points.
 			if X_range == false || Y_range == false #we require both to be there...
 				@debug("Doing standard full set up...")
-				mark_gremodel, deg_gremodel, population, mark_grem_prot, deg_grem_prot = std_setup.full_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem, pop_size, 1200, 1200, rand_barcode, frame)
+				mark_gremodel, deg_gremodel, population, mark_grem_prot, deg_grem_prot = std_setup.full_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
 			else
 				@debug("The x range is $X_range")
 				@debug("The y range is $Y_range")
@@ -421,7 +426,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.5 - Jul 2021 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.6 - Jul 2021 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
@@ -448,9 +453,14 @@ function run_file()
 			line_count += 1
 			if line[1] != '#' && (line_count % NUM_THREADS == run_i)
                 rand_barcode = Random.randstring()
-				try
-					run_args = split(line, "\t")
-					out_dir, short, long, short_jld, long_jld, short_hmm, long_hmm, pop_size, frame, rel_change_thr = run_args
+				run_args = split(line, '\t')
+                try
+                    out_dir, short, long, short_jld, long_jld, short_hmm, long_hmm, pop_size, frame, rel_change_thr, host_tid = run_args
+
+                    host_tid = parse(Int64, host_tid)
+                    if host_tid == 0  #If default taxid, then use E. coli taxid
+                        host_tid = 562
+                    end
                     
 					the_out_path = "$out_dir/$(short)_$(long)_$frame/"
 					if !(isdir(the_out_path))
@@ -470,7 +480,7 @@ function run_file()
                                             short_jld, long_jld,
                                             short_hmm, long_hmm,
                                             pop_size, frame,
-                                            rel_change_thr)
+                                            rel_change_thr, host_tid)
 					end
 
 					flush(log_io)

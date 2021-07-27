@@ -11,6 +11,10 @@ using Logging, StatsBase, Distributions, Unicode
 islower(s) = all(c->islowercase(c) | isspace(c), s);
 
 
+function info(x)
+	println("INFO: $x")
+end
+
 function debug(x)
 	println("DEBUG: $x")
 end
@@ -20,14 +24,13 @@ function err(x)
 end
 
 include("types.jl")
-#include("math.jl")
 include("bio_seq.jl")
 include("hmm_logic.jl")
 include("dyn_frwd.jl")
 include("mrf.jl")
-#include("lookup.jl")
+#include("host.jl")
 
-function CAMEOS_main(x, x_prot, y, y_prot, frame, extra_out = false)
+function CAMEOX_main(x, x_prot, y, y_prot, frame, myhost, extra_out = false)
 	start_time = time()
 
 	X_len, X_hmm_state, X_hmm_insert, X_hmm_match = create_HMM(x)
@@ -40,12 +43,12 @@ function CAMEOS_main(x, x_prot, y, y_prot, frame, extra_out = false)
 	Y_len += 2 #for the stop and since we're looking one back...
 
 	mark_name = x_prot
-	m_pd, m_nd = load_hmm_seq(mark_name, X_hmm, X_len)
+	m_pd, m_nd = load_hmm_seq(mark_name, X_hmm, X_len, myhost)
 	mark_prot = m_pd[mark_name]
 	mark_nuc = m_nd[mark_name]
 
 	deg_name = y_prot
-	d_pd, d_nd = load_hmm_seq(deg_name, Y_hmm, Y_len)
+	d_pd, d_nd = load_hmm_seq(deg_name, Y_hmm, Y_len, myhost)
 	deg_prot = d_pd[deg_name]
 	deg_nuc = d_nd[deg_name]
 
@@ -186,10 +189,15 @@ function NST_get_explicit_mapping(wt_seq, hmm_file)
 	return mapping
 end
 
-function NST_full_general_main(x_prot, x_hmm, y_prot, y_hmm, frame, num_samples, prob_thresh, soft_temp, soft_temp_start, abs_bad, fin_x_nuc="", fin_x_prot="", fin_y_nuc="", fin_y_prot="")
-	gen_bbt, X_hmm_obj, Y_hmm_obj, X_len, Y_len, x_prot_seq, y_prot_seq, mark_nuc, deg_nuc = CAMEOS_main(x_hmm, x_prot, y_hmm, y_prot, frame, true)
-	println("INFO:std_setup:NST_full_general_main(): CAMEOX tensor built")
-	cumulative_score = 0.0
+function NST_full_general_main(
+    x_prot, x_hmm, y_prot, y_hmm, frame, myhost, num_samples, prob_thresh,
+    soft_temp, soft_temp_start, abs_bad, fin_x_nuc="", fin_x_prot="",
+    fin_y_nuc="", fin_y_prot="")
+    
+	gen_bbt, X_hmm_obj, Y_hmm_obj, X_len, Y_len, x_prot_seq, y_prot_seq, mark_nuc, deg_nuc = CAMEOX_main(x_hmm, x_prot, y_hmm, y_prot, frame, myhost, true)
+	info("std_setup:NST_full_general_main(): CAMEOX tensor built")
+
+    cumulative_score = 0.0
 	failures = 0
 	success_count = 0
 	min_len = min(Y_len, X_len) - 1
@@ -235,10 +243,15 @@ function NST_full_general_main(x_prot, x_hmm, y_prot, y_hmm, frame, num_samples,
 	return all_samples
 end
 
-function NST_full_general_main_range(x_prot, x_hmm, y_prot, y_hmm, frame, num_samples, prob_thresh, soft_temp, soft_temp_start, abs_bad, x_range, y_range, fin_x_nuc="", fin_x_prot="", fin_y_nuc="", fin_y_prot="")
+function NST_full_general_main_range(
+    x_prot, x_hmm, y_prot, y_hmm, frame, myhost, num_samples, prob_thresh,
+    soft_temp, soft_temp_start, abs_bad, x_range, y_range, fin_x_nuc="",
+    fin_x_prot="", fin_y_nuc="", fin_y_prot="")
+
 	#This function only goes through a single range.
-	gen_bbt, X_hmm_obj, Y_hmm_obj, X_len, Y_len, x_prot_seq, y_prot_seq, mark_nuc, deg_nuc = CAMEOS_main(x_hmm, x_prot, y_hmm, y_prot, frame, true)
-	println("INFO:std_setup:NST_full_general_main_range(): CAMEOX tensor built")
+	gen_bbt, X_hmm_obj, Y_hmm_obj, X_len, Y_len, x_prot_seq, y_prot_seq, mark_nuc, deg_nuc = CAMEOX_main(x_hmm, x_prot, y_hmm, y_prot, frame, myhost, true)
+	info("std_setup:NST_full_general_main_range(): CAMEOX tensor built")
+
 	cumulative_score = 0.0
 	failures = 0
 	success_count = 0
@@ -462,10 +475,19 @@ function hmm_score_helper(deg_in_read)
 	return deg_hmm_scores
 end
 
-function full_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem, pop_size, num_samples, bad_threshold, rand_barcode, frame="p1")
-	my_prots = NST_full_general_main(mark_name, mark_hmm, deg_name, deg_hmm, frame, pop_size * 50, 0.90, 1.0, 1.0, 1200, gen_hmm_trace(mark_name, mark_hmm)..., gen_hmm_trace(deg_name, deg_hmm)...)
+function full_set_up(
+    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem,
+    pop_size, num_samples, bad_threshold, rand_barcode, frame="p1",
+    host_tid=562)
 
-	println("INFO:std_setup:full_set_up(): Evaluating HMM seeds...")
+    myhost = host.Host{Int64}(host_tid)
+    
+	my_prots = NST_full_general_main(
+        mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost, pop_size * 50,
+        0.90, 1.0, 1.0, 1200, gen_hmm_trace(mark_name, mark_hmm, myhost)...,
+        gen_hmm_trace(deg_name, deg_hmm, myhost)...)
+
+	info("std_setup:full_set_up(): Evaluating HMM seeds...")
 	@debug("std_setup:full_set_up(): We've generated samples.")
 
 	sample_count = 1
@@ -623,8 +645,18 @@ function full_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm
 	return mark_grem_model, deg_grem_model, chromosomes, mark_grem_prot, deg_grem_prot
 end
 
-function full_sample_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem, pop_size, num_samples, bad_threshold, rand_barcode, mark_range, deg_range, frame="p1")
-	my_sampled_prots = NST_full_general_main_range(mark_name, mark_hmm, deg_name, deg_hmm, frame, pop_size * 50, 0.90, 1.0, 1.0, 1200, mark_range, deg_range, gen_hmm_trace(mark_name, mark_hmm)..., gen_hmm_trace(deg_name, deg_hmm)...)
+function full_sample_set_up(
+    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem,
+    pop_size, num_samples, bad_threshold, rand_barcode, mark_range, deg_range,
+    frame="p1", host_tid=562)
+
+    myhost = host.Host{Int64}(host_tid)
+    
+	my_sampled_prots = NST_full_general_main_range(
+        mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost, pop_size * 50,
+        0.90, 1.0, 1.0, 1200, mark_range, deg_range,
+        gen_hmm_trace(mark_name, mark_hmm, myhost)...,
+        gen_hmm_trace(deg_name, deg_hmm, myhost)...)
 
 	sample_count = 1
 	mark_sub_prots = Dict{String, String}()

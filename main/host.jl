@@ -1,5 +1,5 @@
 """
-host: struct dealing with different hosts (E.coli, pf5)
+host: struct dealing with different hosts (E.coli, pf5, and more)
 """
 
 module host
@@ -85,12 +85,6 @@ end
 function optimize_codons(host, aa_seq::AbstractString)
 	return join([host.opt_codon[aa] for aa in aa_seq])
 end
-
-h_ecoli = Host{Int64}(562)
-print(h_ecoli)
-h_pf5 = Host{Int64}(220664)
-println(h_pf5)
-println(optimize_codons(h_pf5, "ARNDBZVWY*"))
 
 end
 
