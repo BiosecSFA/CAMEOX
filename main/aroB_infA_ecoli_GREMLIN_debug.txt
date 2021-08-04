@@ -1,0 +1,1 @@
+output/	aroB_ecoli_GREMLIN	infA_ecoli_GREMLIN	jlds/aroB_ecoli_GREMLIN.jld	jlds/infA_ecoli_GREMLIN.jld	hmms/aroB_ecoli_GREMLIN.hmm	hmms/infA_ecoli_GREMLIN.hmm	128	p1	0	562
