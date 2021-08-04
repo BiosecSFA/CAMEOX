@@ -289,10 +289,10 @@ function redo_alignment(grem_text, sample_nucs, is_mark_not_deg)
 					while_flag = true
 					#that means CAMEOS stayed at the same hmm node. An insertion.
 					#if there is an insertion here from MRF, presumably it would consume the HMM "insertion"
-					if islower(grem_text[char])
+					if char <= length(grem_text) && islower(grem_text[char])
 						#We don't consider this skippable because there is an insertion from the MRF offsetting the HMM insertion.
 						grem_pos += 1
-						char += 1
+						char += 1  # THIS ADVANCES FURTHER THE FOOR LOOP VARIABLE!
 					else
 						#If just business as usual, though, then we skip the hmm insertion.
 						push!(skip[k], grem_pos)

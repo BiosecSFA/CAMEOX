@@ -65,7 +65,12 @@ function ca_ds_kt(wt_vec, nNodes, w1, w2, wt_ull, pv_w1, pv_w2, mut_start, mut_e
 
 	needed_partitions = compute_partitions(perturbed_sums, w1, nNodes, necessary_rows)
 
-	true_ull = new_pv_w2 * wt_vec' .- (wt_vec[region]' * new_pv_w2[region])
+	#true_ull = new_pv_w2 * wt_vec' .- (wt_vec[region]' * new_pv_w2[region])
+    # Separated because of problem similar to https://github.com/JuliaLang/julia/issues/37767
+	true_ull_min = new_pv_w2 * wt_vec' 
+	true_ull_sus = wt_vec[region]' * new_pv_w2[region]
+    true_ull = similar(true_ull_min)
+	@. true_ull = true_ull_min - true_ull_sus
 	#println(true_ull)
 	ull_mat = ones(21) * true_ull[1] * ones(21)'
 	all_aa_ull = ull_mat .+ 2*new_pv_w2[1:1, region[1:21]]'
