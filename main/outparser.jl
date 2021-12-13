@@ -33,12 +33,16 @@ function parse_commandline()
         "--fasta"
             help = "generate also a FASTA file with specific content: all, fullseq, mark_gene, mark_seq, deg_gene, deg_seq"
             arg_type = String
+        "--output"
+			help = "name of CAMEOX base output directory"
+            arg_type = String
+		    default = "output"             
 	end
 	return parse_args(s)
 end
 
 function outparse_cameos()
-    println("=-= CAMEOX output parser =-= v0.6 - Jul 2021 =-= by LLNL =-=")
+    println("=-= CAMEOX output parser =-= v0.7 - Dec 2021 =-= by LLNL =-=")
 
     # Parse arguments
    	parsed_args = parse_commandline()
@@ -47,6 +51,7 @@ function outparse_cameos()
 	runid = parsed_args["runid"]
 	frame = parsed_args["frame"]
     fasta = parsed_args["fasta"]
+    output = parsed_args["output"]
 
     # Get complete path for input and output files
     subdir = string(mark_gene, "_", deg_gene, "_", frame)
@@ -56,9 +61,9 @@ function outparse_cameos()
     if fasta != nothing && fasta != "all"
         fa_file = string("variants_", runid, "_", fasta, ".fasta")
     end
-    in_path = string("output/", subdir, "/", jld_file)
-    out_path = string("output/", subdir, "/", csv_file)
-    fa_path = string("output/", subdir, "/", fa_file)
+    in_path = string(output, "/", subdir, "/", jld_file)
+    out_path = string(output, "/", subdir, "/", csv_file)
+    fa_path = string(output, "/", subdir, "/", fa_file)
     if fasta == "fullseq" # Rename with the long field
         fasta == "full_sequence"
     end
