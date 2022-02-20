@@ -1,3 +1,4 @@
+"""pycameox setup.py"""
 import setuptools
 
 with open("README.md", "r", encoding="utf-8") as fh:
@@ -5,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name='pycameox',
-    version='0.0.2',
+    version='0.0.3',
     author='Jose Manuel Martí',
     author_email='martimartine1@llnl.gov',
     description='Python library for CAMEOX (CAMEOs eXtended)',
@@ -13,7 +14,7 @@ setuptools.setup(
     long_description_content_type='text/markdown',
     url='https://github.com/BiosecSFA/CAMEOX',
     project_urls={
-        'Bug Tracker':'https://github.com/BiosecSFA/CAMEOX/issues',
+        'Bug Tracker': 'https://github.com/BiosecSFA/CAMEOX/issues',
         },
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',

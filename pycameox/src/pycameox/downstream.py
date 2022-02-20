@@ -4,11 +4,11 @@
 # ### Dependencies
 from collections import Counter
 import difflib
-from pathlib import Path
 import re
-from typing import Set, List, Any, Dict, Iterator, NewType, Optional, NamedTuple
+import typing
+from typing import Set, List, Any, Dict, Iterator, Optional, NamedTuple
 
-from pycameox.config import Filename, Id, Seq, RunsSet, SampleSet
+from pycameox.config import RunsSet, SampleSet
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,28 +18,7 @@ import plotly.offline as py
 import scipy
 
 
-# ###  Behaviour
-debug: bool = False
-verbose: bool = True
-# Disable in case of trouble storing the notebook with plotly rendered i-plots
-interactive: bool = False
-
-
-def vprint(*arguments, **kargs) -> None:
-    """Print only if verbose mode is enabled"""
-    if verbose:
-        print(*arguments, **kargs)
-
-
-# ### Constants
-# Limit in the number of seeds for further considering a CAMEOX run
-POP_SIZE_THRESHOLD: int = 1000
-# Limit in the number of iterations for further considering a CAMEOX run
-ITERS_THRESHOLD: int = 1000
-
-
 # ### General methods
-
 # #### Get ~ratio
 def get_ratio(seqA, seqB):
     return difflib.SequenceMatcher(None, seqA, seqB, autojunk=False).ratio()
@@ -51,7 +30,7 @@ def get_redundancy(datasets: RunsSet,
                    protB: str,
                    proteins: Dict[str, str],
                    source: str = 'supp',
-                   verbose: bool = verbose) -> Optional[pd.DataFrame]:
+                   verbose: bool = False) -> Optional[pd.DataFrame]:
     """Get redundancy dataframe for a set of CAMEOX runs.
 
     In the obtained dataframe:
@@ -72,7 +51,7 @@ def get_redundancy(datasets: RunsSet,
     seqB: str = protB + '_' + ('trans' if source == 'supp' else 'seq')
 
     # Get set of dataframes with redundant variants for each run
-    redundant: RunsSet = {}
+    redundant: RunsSet = RunsSet({})
     for name, df in datasets.items():
         # vardup contains only duplicated rows
         vardup = df.loc[df.duplicated(subset=[seqA, seqB], keep=False)].copy()
@@ -145,10 +124,14 @@ def get_redundancy(datasets: RunsSet,
     # Calculate ERP
     renucl = re.compile('A|T|C|G')
     vprint('Finally, calculating entanglement relative position...')
-    erp: pd.Series = redundancy['full_seq'].apply(
-        lambda fullseq: round(
-            (renucl.search(fullseq).start() / len(fullseq)), 3))
-    redundancy['ERP'] = erp
+    erp: pd.Series
+    try:
+        erp = redundancy['full_seq'].apply(
+            lambda fullseq: round(
+                (renucl.search(fullseq).start() / len(fullseq)), 3))
+        redundancy['ERP'] = erp
+    except AttributeError:
+        raise
 
     return(redundancy)
 
@@ -545,7 +528,7 @@ def sample_pareto_front(dset: pd.DataFrame,
                         protB: str,
                         size: int = 500,
                         erp: float = None,
-                        verbose: bool = verbose) -> pd.DataFrame:
+                        verbose: bool = False) -> pd.DataFrame:
     """Sample variants on Pareto front for a set of CAMEOX runs and for a given ERP.
     """
 
@@ -588,7 +571,7 @@ def sample_pareto_front(dset: pd.DataFrame,
     # Explore Pareto's front from center (top pair) towards extremes ("above" and "below") in psls (aka APLL/NPLL)
     #
     # Initialization
-    pareto_points: Dict(int, pd.Series) = {}
+    pareto_points: Dict[int, pd.Series] = {}
     cntr_above: int = 0  # Counter of variants in Pareto's front "above" the top
     cntr_below: int = 0  # Counter of variants in Pareto's front "below" the top
     idxA: int
@@ -637,7 +620,7 @@ def sample_multiplicity(dset: pd.DataFrame,
                         size: int = 500,
                         erp: float = None,
                         sampled: SampleSet = None,
-                        verbose: bool = verbose) -> pd.DataFrame:
+                        verbose: bool = False) -> pd.DataFrame:
     """Sample variants with multiplicity.
     """
 
@@ -657,7 +640,7 @@ def sample_multiplicity(dset: pd.DataFrame,
         all_sampled: pd.DataFrame = pd.concat(
             [df for df in sampled.values()],
             ignore_index=True)
-        all_sampled_full_seqs: Set(str) = set(all_sampled['full_seq'])
+        all_sampled_full_seqs: Set[str] = set(all_sampled['full_seq'])
         print(
             f'INFO: Checking against {len(all_sampled_full_seqs)} already sampled variants')
         num_rows: List[int] = []
@@ -683,7 +666,7 @@ def inv_avg_pdist_com(num_stds,
                       desired_features: int = 3,
                       penalization: float = 0.1,
                       debug: bool = False,
-                      results: List[int] = None,
+                      results: List[Dict[str, Any]] = None,
                       ) -> float:
     """Minimization target: inverse averaged pairwise distance for centers of mass"""
     H_zeroclipped = np.clip(
@@ -700,7 +683,7 @@ def inv_avg_pdist_com(num_stds,
             print(
                 f' inv_avg_pdist_com: features={num_features}, so returning max value!')
         # Deliver maximum value for undesired num_features
-        return (np.finfo(float).max / 10)
+        return (float(np.finfo(float).max) / 10)
     com = scipy.ndimage.center_of_mass(
         H_zeroclipped, L, range(
             1, num_features + 1))
@@ -722,7 +705,7 @@ def search_overdensities(H: np.ndarray,
                          overdensities: int = 3,
                          penalization: float = 0.1,
                          std_max: float = 5.0,  # Max std from mean to explore
-                         verbose: bool = verbose) -> pd.DataFrame:
+                         verbose: bool = False) -> pd.DataFrame:
     """Search for different number of overdensities"""
 
     # Mask bins with no variants (0.0) in the APLL space so they are not
@@ -753,7 +736,7 @@ def search_overdensities(H: np.ndarray,
         results=best_results)
     # num_features = best_results[0]['num_features']
     L = best_results[0]['L']
-    locs: List(slice) = scipy.ndimage.find_objects(L)
+    locs: List[slice] = scipy.ndimage.find_objects(L)
 
     # Return the OptimizeResult object and a list of dicts with results for
     # every call and locs for the best
@@ -763,7 +746,7 @@ def search_overdensities(H: np.ndarray,
 def plot_overdensities(X: np.ndarray,
                        Y: np.ndarray,
                        H: np.ndarray,
-                       locs: List[slice],
+                       locs: List[List[slice]],
                        protA: str,
                        protB: str,
                        axlim: List[float] = None,
@@ -805,7 +788,7 @@ def sample_overdensities(dset: pd.DataFrame,
                          penalization: float = 0.1,
                          erp: float = None,
                          sampled: SampleSet = None,
-                         verbose: bool = verbose) -> pd.DataFrame:
+                         verbose: bool = False) -> pd.DataFrame:
     """Sample variants from APLL overdensities.
     """
 
@@ -855,7 +838,7 @@ def sample_overdensities(dset: pd.DataFrame,
     # Retrieve variants from detected overdensities
     vprint('>> Results for overdensities <<')
     num_features: int = len(locs)
-    ods: SampleSet = {}
+    ods: SampleSet = SampleSet({})
     for f in range(num_features):
         # Filter variants in the detected overdensity region (rectangle)
         sliceX = locs[f][1]
@@ -911,7 +894,7 @@ def sample_overdensities(dset: pd.DataFrame,
 
     # Retrieve variants from detected overdensities
     vprint('>> Sampling from detected overdensities sets...')
-    all_sampled_full_seqs: Set(str) = set()
+    all_sampled_full_seqs: Set[str] = set()
     if sampled is not None:
         all_sampled: pd.DataFrame = pd.concat(
             [df for df in sampled.values()],
@@ -923,7 +906,7 @@ def sample_overdensities(dset: pd.DataFrame,
         f: ods[f].itertuples() for f in range(num_features)}
     od_num_rows: Dict[int, List[int]] = {  # Dict with overdensity map to list of selected columns
         f: [] for f in range(num_features)}
-    cnt: Counter(int) = Counter(  # Keeps track of the number of checked variants per overdensity region
+    cnt: typing.Counter[int] = Counter(  # Keeps track of the number of checked variants per overdensity region
         {f: 0 for f in range(num_features)})
     last_cnt_total: int = -1  # Sum of the counts in the previous iteration
 
@@ -978,7 +961,7 @@ def sample_random(dset: pd.DataFrame,
                   size: int = 500,
                   erp: float = None,
                   sampled: SampleSet = None,
-                  verbose: bool = verbose) -> pd.DataFrame:
+                  verbose: bool = False) -> pd.DataFrame:
     """Randomly sample variants
     """
 
@@ -1003,7 +986,7 @@ def sample_random(dset: pd.DataFrame,
 
     # Retrieve variants from detected overdensities
     vprint('>> Randomly sampling...')
-    all_sampled_full_seqs: Set(str) = set()
+    all_sampled_full_seqs: Set[str] = set()
     if sampled is not None:
         all_sampled: pd.DataFrame = pd.concat(
             [df for df in sampled.values()],
@@ -1038,18 +1021,17 @@ def sample_random(dset: pd.DataFrame,
 # ### Save sampled variants
 def save_sampled(sampled: SampleSet,
                  protA: str,
-                 protB: str,
-                 verbose: bool = verbose) -> None:
+                 protB: str) -> None:
     """Save sampled variants"""
 
     total: int = 0
     for name, dset in sampled.items():
-        vprint(
+        print(
             f"Saving sampled dataset '{name}' with {len(dset)} variants... ",
             end='')
         dset[['full_seq', f'{protA}_seq', f'{protB}_seq', 'ERP']].to_csv(
             f'{name}_CAMEOX_{protA}_{protB}_pairs.csv', index=False, header=True)
         total += len(dset)
-        vprint('OK!')
+        print('OK!')
     print(
         f"Saved {total} total different variants distributed in {len(sampled)} datasets")
