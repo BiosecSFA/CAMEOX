@@ -12,7 +12,6 @@ include("math.jl")
 include("optimize.jl")
 include("mrf.jl")
 include("bio_seq.jl")
-#include("host.jl")
 
 using ArgParse, Logging, JLD, StatsBase, Distributions, Random, Statistics
 
@@ -47,7 +46,8 @@ Arguments:
 	mark/deg_hmm : path to HMM files, usually .hmm files.
 	pop_size : size of population, i.e. number of individual HMM solutions to greedily optimize.
 	frame : p1/p2.
-	max_iter : maximum number of iterations.
+	rel_change_thr : minimum threshold for the relative number of variants changing, used for setting a dynamic limit on the number of iterations.
+    host_tid : NCBI Taxonomic ID for the host of the entanglement, used by the host generalization subsystem (default of 562 for E. coli)
 	X_range/Y_range: positions along gene to consider for double-encoding... useful if you want to restrict where double-encoding can occur.
 						Ranges are defined in terms of the end of the sequence, so if you have a 70 aa sequence you want to start at position 80,
 						set the range to be something like 150:151. Generally some buffer around this value (i.e. 150:160) is useful.
@@ -419,24 +419,24 @@ function parse_commandline()
 			help = "optional, experimentally used for running multiple jobs at once"
 			default = "0"
 		"--threads"
-			help = "optional, experimentally used for running multiple jobs at once"
+			help = "optional, used for parallelizing each job within a node"
 			default = "1"
 	end
 	return parse_args(s)
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.6 - Jul 2021 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.7 - Nov 2021 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
 
-	run_i = parse(Int64, num)
+	RUN_I = parse(Int64, num)
 	NUM_THREADS = parse(Int64, threads)
 
-	if NUM_THREADS > 1
+	if RUN_I > 1 && NUM_THREADS > 1
 		sleep(rand() * 2) #randomly delay start to de-synchronize starts of runs.
 	end
 
@@ -446,12 +446,12 @@ function run_file()
 		close(in_file)
 
 		#This is an additional file that records errors independent of individual log files.
-		problem_file = open("problem_runs_$(run_i).txt", "a")
+		problem_file = open("problem_runs_$(RUN_I).txt", "a")
 
 		line_count = 0
 		for line in in_read #
 			line_count += 1
-			if line[1] != '#' && (line_count % NUM_THREADS == run_i)
+			if line[1] != '#' && (line_count % NUM_THREADS == RUN_I)
                 rand_barcode = Random.randstring()
 				run_args = split(line, '\t')
                 try
