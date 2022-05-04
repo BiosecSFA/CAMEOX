@@ -23,12 +23,17 @@ function population_to_saveable(cur_pop;
 	new_pop = types.SaveChrome[]
 
 	for indiv in cur_pop
-		push!(new_pop, types.SaveChrome(indiv.path, indiv.full_sequence,
-										indiv.deg_nuc, indiv.deg_map, indiv.deg_trns, indiv.deg_trne, indiv.deg_d, indiv.deg_skip, indiv.deg_insert,
-										indiv.mark_nuc, indiv.mark_map, indiv.mark_trns, indiv.mark_trne, indiv.mark_d, indiv.mark_skip, indiv.mark_insert,
-										indiv.deg_prob, indiv.deg_base_E, indiv.deg_seq, indiv.deg_prob-deg_wt_apll, 
-										indiv.mark_prob, indiv.mark_base_E, indiv.mark_seq, indiv.mark_prob-mark_wt_apll,
-                                        indiv.first_weight))
+		push!(
+            new_pop,
+            types.SaveChrome(
+                indiv.path, indiv.full_sequence, indiv.deg_nuc, indiv.deg_map,
+                indiv.deg_trns, indiv.deg_trne, indiv.deg_d, indiv.deg_skip,
+                indiv.deg_insert, indiv.mark_nuc, indiv.mark_map,
+                indiv.mark_trns, indiv.mark_trne, indiv.mark_d,
+                indiv.mark_skip, indiv.mark_insert,	indiv.deg_prob,
+                indiv.deg_base_E, indiv.deg_seq, indiv.deg_prob-deg_wt_apll, 
+				indiv.mark_prob, indiv.mark_base_E, indiv.mark_seq,
+                indiv.mark_prob-mark_wt_apll, indiv.first_weight))
 	end
 	return new_pop
 end
@@ -48,6 +53,8 @@ Arguments:
 	frame : p1/p2.
 	rel_change_thr : minimum threshold for the relative number of variants changing, used for setting a dynamic limit on the number of iterations.
     host_tid : NCBI Taxonomic ID for the host of the entanglement, used by the host generalization subsystem (default of 562 for E. coli)
+    pll_weights:  control the selection of PLL weights for the entanglement pair with the following choices:
+                equal (CAMEOS default), rand (paper and CAMEOX default), close2mark, close2deg. 
 	X_range/Y_range: positions along gene to consider for double-encoding... useful if you want to restrict where double-encoding can occur.
 						Ranges are defined in terms of the end of the sequence, so if you have a 70 aa sequence you want to start at position 80,
 						set the range to be something like 150:151. Generally some buffer around this value (i.e. 150:160) is useful.
@@ -55,8 +62,8 @@ Arguments:
 """
 function set_up_and_optimize(
     log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
-    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, host_tid=562,
-    X_range=false, Y_range=false; rand_weights = true, actually_mrf = true)
+    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, host_tid = 562,
+    pll_weights = "rand"; X_range=false, Y_range=false, actually_mrf = true)
 
 	@debug("Beginning run.")
 	@debug(Libc.strftime(time()))
@@ -84,17 +91,26 @@ function set_up_and_optimize(
 		local mark_grem_prot, deg_grem_prot
 		if !gen_samples
 			population = load("trpE_population.jld")["population"][1:100] #[1:100]
-			mark_gremodel, deg_gremodel = std_setup.short_set_up(mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm, length(population), rand_barcode, frame)
+			mark_gremodel, deg_gremodel = std_setup.short_set_up(
+                mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm,
+                length(population), rand_barcode, frame)
 			deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
 		else
 			#Generate population of sampled hmm starting points.
 			if X_range == false || Y_range == false #we require both to be there...
 				@debug("Doing standard full set up...")
-				mark_gremodel, deg_gremodel, population, mark_grem_prot, deg_grem_prot = std_setup.full_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
+				mark_gremodel, deg_gremodel, population, mark_grem_prot,
+                deg_grem_prot = std_setup.full_set_up(
+                    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
+                    deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
 			else
 				@debug("The x range is $X_range")
 				@debug("The y range is $Y_range")
-				mark_gremodel, deg_gremodel, population, mark_grem_prot, deg_grem_prot = std_setup.full_sample_set_up(out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem, pop_size, 1200, 1200, rand_barcode, X_range, Y_range, frame)
+				mark_gremodel, deg_gremodel, population, mark_grem_prot,
+                deg_grem_prot = std_setup.full_sample_set_up(
+                    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
+                    deg_grem, pop_size, 1200, 1200, rand_barcode,
+                    X_range, Y_range, frame)
 			end
 			deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
 		end
@@ -131,7 +147,15 @@ function set_up_and_optimize(
 			mark_base_energy = mrf.basic_energy_calc(mark_grem_prot, mark_gremodel.w1, mark_gremodel.w2)
 			deg_base_energy = mrf.basic_energy_calc(deg_grem_prot, deg_gremodel.w1, deg_gremodel.w2)
 
-			#Now we load this info into an ExChrome type object.
+            # Get the right PLL static weighting (rand is inside the loop later)
+            static_1st_weight = 0.5  # case pll_weights = "equal"
+            if pll_weights == "close2mark"
+                static_1st_weight = 1.0
+            elseif pll_weights == "close2deg"
+                static_1st_weight = 0.0
+            end
+
+			# Now we load this info into an ExChrome type object
 			cur_pop = types.ExChrome[]
 			for i in 1:length(success_chrom)
 				old = success_chrom[i]
@@ -147,7 +171,8 @@ function set_up_and_optimize(
                     mark_base_energy, mark_prot_mat[i:i, 1:end],
                     utils.aa_vec_to_seq(mark_prot_mat[i:i, 1:end]), mark_ull[i],
                     mark_pv_w1[i], mark_pv_w2[i:i, 1:end],
-                    rand_weights ? rand() : 0.5, 0)
+                    pll_weights == "rand" ? rand() : static_1st_weight,
+                    0)
 				push!(cur_pop, new_chrom)
 			end
 
@@ -395,11 +420,11 @@ function set_up_and_optimize(
             metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
             if !isfile(metadata_filename)
 			    out_file = open(metadata_filename, "w")  
-			    write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,rand_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness\n") 
+			    write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness\n") 
             else
 			    out_file = open(metadata_filename, "a")                
             end
-            write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(rand_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values)))\n")
+            write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(pll_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values)))\n")
             close(out_file)
         end
 		@debug("REALLY DONE!")
@@ -426,7 +451,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.7 - Nov 2021 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.8 - May 2022 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
@@ -455,11 +480,20 @@ function run_file()
                 rand_barcode = Random.randstring()
 				run_args = split(line, '\t')
                 try
-                    out_dir, short, long, short_jld, long_jld, short_hmm, long_hmm, pop_size, frame, rel_change_thr, host_tid = run_args
+                    out_dir, short, long, short_jld, long_jld, short_hmm,
+                    long_hmm, pop_size, frame, rel_change_thr, host_tid,
+                    pll_weights = run_args
 
                     host_tid = parse(Int64, host_tid)
                     if host_tid == 0  #If default taxid, then use E. coli taxid
                         host_tid = 562
+                    end
+
+                    if !(pll_weights in [
+                        "equal", "rand", "close2mark", "close2deg"])
+                        throw(DomainError(
+                            pll_weights,
+                            "this PLL optimization choice is unknown!"))
                     end
                     
 					the_out_path = "$out_dir/$(short)_$(long)_$frame/"
@@ -467,7 +501,9 @@ function run_file()
 						run(`mkdir -p $the_out_path`)
 					end
 
-					log_io = open("$out_dir/$(short)_$(long)_$frame/log_$(rand_barcode).txt", "w+")
+					log_io = open(
+                        "$out_dir/$(short)_$(long)_$frame/log_$(rand_barcode).txt",
+                        "w+")
 
 					logger = SimpleLogger(log_io, Logging.Debug)
 					global_logger(logger)
@@ -480,13 +516,15 @@ function run_file()
                                             short_jld, long_jld,
                                             short_hmm, long_hmm,
                                             pop_size, frame,
-                                            rel_change_thr, host_tid)
+                                            rel_change_thr, host_tid,
+                                            pll_weights)
 					end
 
 					flush(log_io)
 					close(log_io)
 				catch y
-					write(problem_file, "BC $rand_barcode ==> Problem $y processing line: $line\n")
+					write(problem_file,
+                          "BC $rand_barcode ==> Problem $y processing line: $line\n")
                     flush(problem_file)
                     close(problem_file)  # Remove if rethrow removed below
                     rethrow()
@@ -503,3 +541,4 @@ end
 @time run_file()
 
 end
+

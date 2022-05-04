@@ -329,14 +329,27 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 
 			final_options = zeros(Float32, length(mut_dna_options))
 			for iii in 1:length(mut_dna_options)
-				if !(21 in resulting_deg_aas[iii]) && !(21 in resulting_mark_aas[iii]) #no stop codons allowed!
+				if (!(21 in resulting_deg_aas[iii])
+                    && !(21 in resulting_mark_aas[iii])) #no stop codons allowed!
 					if use_energy && mark_normal && deg_normal
 						#We multiply by 2.0 so that the "weight" is more intuitively set from 0-1 but values remain reflective of real psls.
-						final_options[iii] = 2.0 * individual.first_weight * abs(logpdf(mark_normal, mark_psl_opt[mark_cads_map[resulting_mark_aas[iii]]])) #abs(logpdf(mark_normal, mark_psl_opt[mark_cads_map[resulting_mark_aas[iii]]]))
-						final_options[iii] += 2.0 * (1.0 - individual.first_weight) * abs(logpdf(deg_normal, deg_psl_opt[deg_cads_map[resulting_deg_aas[iii]]]))
+						final_options[iii] = (
+                        2.0 * individual.first_weight * abs(logpdf(
+                            mark_normal, mark_psl_opt[mark_cads_map[
+                                resulting_mark_aas[iii]]]))) #abs(logpdf(mark_normal, mark_psl_opt[mark_cads_map[resulting_mark_aas[iii]]]))
+						final_options[iii] += (
+                        2.0 * (1.0 - individual.first_weight) * abs(logpdf(
+                            deg_normal, deg_psl_opt[deg_cads_map[
+                                resulting_deg_aas[iii]]])))
 					else
-						final_options[iii] = 2.0 * individual.first_weight * (mark_psl_opt[mark_cads_map[resulting_mark_aas[iii]]] - individual.mark_base_E)
-						final_options[iii] += 2.0 * (1.0 - individual.first_weight) * (deg_psl_opt[deg_cads_map[resulting_deg_aas[iii]]] - individual.deg_base_E)
+						final_options[iii] = (
+                        2.0 * individual.first_weight * (mark_psl_opt[
+                            mark_cads_map[resulting_mark_aas[iii]]] -
+                                individual.mark_base_E))
+						final_options[iii] += (
+                        2.0 * (1.0 - individual.first_weight) * (deg_psl_opt[
+                            deg_cads_map[resulting_deg_aas[iii]]] -
+                                individual.deg_base_E))
 					end
 				else
 					final_options[iii] = 1_000_000.0
