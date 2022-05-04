@@ -961,6 +961,7 @@ def sample_random(dset: pd.DataFrame,
                   size: int = 500,
                   erp: float = None,
                   sampled: SampleSet = None,
+                  seed: int = None,
                   verbose: bool = False) -> pd.DataFrame:
     """Randomly sample variants
     """
@@ -975,7 +976,7 @@ def sample_random(dset: pd.DataFrame,
     print("Number of different redundant CAMEOX solutions for this "
           f"{'entanglement' if erp is None else 'ERP'}: {len(dset)}")
 
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed=seed)
     rnd_idx: List[int] = list(
         rng.choice(
             len(dset),
@@ -1029,7 +1030,8 @@ def save_sampled(sampled: SampleSet,
         print(
             f"Saving sampled dataset '{name}' with {len(dset)} variants... ",
             end='')
-        dset[['full_seq', f'{protA}_seq', f'{protB}_seq', 'ERP']].to_csv(
+        dset[['full_seq', f'{protA}_seq', f'{protB}_seq',
+         f'{protA}_psls', f'{protB}_psls','ERP']].to_csv(
             f'{name}_CAMEOX_{protA}_{protB}_pairs.csv', index=False, header=True)
         total += len(dset)
         print('OK!')
