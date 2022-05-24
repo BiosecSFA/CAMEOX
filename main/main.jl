@@ -85,353 +85,350 @@ function set_up_and_optimize(
 
 	@debug("Stat param vars (mark / deg):\t$(mu_mark)\t$(sig_mark)\t$(mu_deg)\t$(sig_deg)")
 
-	if true #replacing try/catch.
-		gen_samples = true #this is true if starting from scratch (general case), false if we have some candidates to optimize ahead of time.
-		population = types.Chromosome[]
-		local mark_grem_prot, deg_grem_prot
-		if !gen_samples
-			population = load("trpE_population.jld")["population"][1:100] #[1:100]
-			mark_gremodel, deg_gremodel = std_setup.short_set_up(
-                mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm,
-                length(population), rand_barcode, frame)
-			deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
+	gen_samples = true #this is true if starting from scratch (general case), false if we have some candidates to optimize ahead of time.
+	population = types.Chromosome[]
+	local mark_grem_prot, deg_grem_prot
+	if !gen_samples
+		population = load("trpE_population.jld")["population"][1:100] #[1:100]
+		mark_gremodel, deg_gremodel = std_setup.short_set_up(
+			mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm,
+			length(population), rand_barcode, frame)
+		deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
+	else
+		#Generate population of sampled hmm starting points.
+		if X_range == false || Y_range == false #we require both to be there...
+			@debug("Doing standard full set up...")
+			mark_gremodel, deg_gremodel, population, mark_grem_prot,
+			deg_grem_prot = std_setup.full_set_up(
+				out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
+				deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
 		else
-			#Generate population of sampled hmm starting points.
-			if X_range == false || Y_range == false #we require both to be there...
-				@debug("Doing standard full set up...")
-				mark_gremodel, deg_gremodel, population, mark_grem_prot,
-                deg_grem_prot = std_setup.full_set_up(
-                    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
-                    deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
-			else
-				@debug("The x range is $X_range")
-				@debug("The y range is $Y_range")
-				mark_gremodel, deg_gremodel, population, mark_grem_prot,
-                deg_grem_prot = std_setup.full_sample_set_up(
-                    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
-                    deg_grem, pop_size, 1200, 1200, rand_barcode,
-                    X_range, Y_range, frame)
-			end
-			deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
+			@debug("The x range is $X_range")
+			@debug("The y range is $Y_range")
+			mark_gremodel, deg_gremodel, population, mark_grem_prot,
+			deg_grem_prot = std_setup.full_sample_set_up(
+				out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
+				deg_grem, pop_size, 1200, 1200, rand_barcode,
+				X_range, Y_range, frame)
+		end
+		deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
+	end
+
+	# Get (anti)pseudolikelihood for WT sequences
+	write_apll_wt = true
+	if write_apll_wt
+		prot_seqs = bio_seq.load_fasta("proteins.fasta")
+		local deg_seq, mark_seq
+		# For mark
+		mark_seq = prot_seqs[mark_name]
+		@debug("$mark_name seq: $mark_seq")
+		mark_ali_seq = uppercase(std_setup.align_consensus(mark_seq, mark_hmm))
+		@debug("$mark_name aligned seq: $mark_ali_seq")            
+		mark_wt_apll::Float32 = mrf.psl(strip(mark_ali_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, true)
+		@debug("$mark_name APLL: $mark_wt_apll")                       
+		# For deg
+		deg_seq = prot_seqs[deg_name]
+		@debug("$deg_name seq: $deg_seq")
+		deg_ali_seq = uppercase(std_setup.align_consensus(deg_seq, deg_hmm))
+		@debug("$deg_name aligned seq: $deg_ali_seq")              
+		deg_wt_apll::Float32 = mrf.psl(strip(deg_ali_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, true)
+		@debug("$deg_name APLL: $deg_wt_apll")            
+	end
+
+	#Look through generated candidates, check their fitness values and their correctness.
+	success_chrom, fdp, fmp, fitness_values, indie_deg_maps, indie_mark_maps, deg_ull, deg_pv_w1, deg_pv_w2, deg_prot_mat, mark_ull, mark_pv_w1, mark_pv_w2, mark_prot_mat = optimize.assess_founders(population, mark_gremodel.nNodes, mark_gremodel.w1, mark_gremodel.w2, deg_gremodel.nNodes, deg_gremodel.w1, deg_gremodel.w2)
+
+	@debug("Num success... $(length(success_chrom))")
+
+	if actually_mrf
+		founding_fitness_values = fitness_values[1:end]
+
+		mark_base_energy = mrf.basic_energy_calc(mark_grem_prot, mark_gremodel.w1, mark_gremodel.w2)
+		deg_base_energy = mrf.basic_energy_calc(deg_grem_prot, deg_gremodel.w1, deg_gremodel.w2)
+
+		# Get the right PLL static weighting (rand is inside the loop later)
+		static_1st_weight = 0.5  # case pll_weights = "equal"
+		if pll_weights == "close2mark"
+			static_1st_weight = 1.0
+		elseif pll_weights == "close2deg"
+			static_1st_weight = 0.0
 		end
 
-        # Get (anti)pseudolikelihood for WT sequences
-        write_apll_wt = true
-        if write_apll_wt
-	        prot_seqs = bio_seq.load_fasta("proteins.fasta")
-	        local deg_seq, mark_seq
-            # For mark
-	        mark_seq = prot_seqs[mark_name]
-            @debug("$mark_name seq: $mark_seq")
-            mark_ali_seq = uppercase(std_setup.align_consensus(mark_seq, mark_hmm))
-            @debug("$mark_name aligned seq: $mark_ali_seq")            
-            mark_wt_apll::Float32 = mrf.psl(strip(mark_ali_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, true)
-            @debug("$mark_name APLL: $mark_wt_apll")                       
-            # For deg
-	        deg_seq = prot_seqs[deg_name]
-            @debug("$deg_name seq: $deg_seq")
-            deg_ali_seq = uppercase(std_setup.align_consensus(deg_seq, deg_hmm))
-            @debug("$deg_name aligned seq: $deg_ali_seq")              
-            deg_wt_apll::Float32 = mrf.psl(strip(deg_ali_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, true)
-            @debug("$deg_name APLL: $deg_wt_apll")            
-        end
+		# Now we load this info into an ExChrome type object
+		cur_pop = types.ExChrome[]
+		for i in 1:length(success_chrom)
+			old = success_chrom[i]
+			new_chrom = types.ExChrome(
+				old.path, old.full_sequence, old.deg_nuc, indie_deg_maps[i],
+				old.deg_trns, old.deg_trne, old.deg_d, old.deg_skip,
+				old.deg_insert, old.mark_nuc, indie_mark_maps[i],
+				old.mark_trns, old.mark_trne, old.mark_d, old.mark_skip,
+				old.mark_insert, fdp[i], deg_base_energy,
+				deg_prot_mat[i:i, 1:end],
+				utils.aa_vec_to_seq(deg_prot_mat[i:i, 1:end]),
+				deg_ull[i], deg_pv_w1[i], deg_pv_w2[i:i, 1:end], fmp[i],
+				mark_base_energy, mark_prot_mat[i:i, 1:end],
+				utils.aa_vec_to_seq(mark_prot_mat[i:i, 1:end]), mark_ull[i],
+				mark_pv_w1[i], mark_pv_w2[i:i, 1:end],
+				pll_weights == "rand" ? rand() : static_1st_weight,
+				0)
+			push!(cur_pop, new_chrom)
+		end
 
-		#Look through generated candidates, check their fitness values and their correctness.
-		success_chrom, fdp, fmp, fitness_values, indie_deg_maps, indie_mark_maps, deg_ull, deg_pv_w1, deg_pv_w2, deg_prot_mat, mark_ull, mark_pv_w1, mark_pv_w2, mark_prot_mat = optimize.assess_founders(population, mark_gremodel.nNodes, mark_gremodel.w1, mark_gremodel.w2, deg_gremodel.nNodes, deg_gremodel.w1, deg_gremodel.w2)
+		#There are occasionally differences between HMM/MRF models of the proteins, mostly because HMMs are more flexible with insertions.
+		#This generates mappings between positions in either data type.
+		mark_hmm_to_grem_map = std_setup.get_explicit_mapping(mark_grem_prot, mark_hmm)
+		deg_hmm_to_grem_map = std_setup.get_explicit_mapping(deg_grem_prot, deg_hmm)
 
-		@debug("Num success... $(length(success_chrom))")
+		@debug("Hey the explicit mapping for mark_hmm_to_grem is $mark_hmm_to_grem_map")
+		@debug("Hey the explicit mapping for deg_hmm_to_grem is $deg_hmm_to_grem_map")
+		#So now everything is in an extended chromosome object.
 
-		if actually_mrf
-			founding_fitness_values = fitness_values[1:end]
+		changed_seq = length(cur_pop)
+		rel_changed_seq = 1.0
+		no_change_iters = 0
+		iter = 0;
 
-			mark_base_energy = mrf.basic_energy_calc(mark_grem_prot, mark_gremodel.w1, mark_gremodel.w2)
-			deg_base_energy = mrf.basic_energy_calc(deg_grem_prot, deg_gremodel.w1, deg_gremodel.w2)
+		#Let's keep track of optimization history.
+		max_iter = 5000  # TO DO: Calculate a better limit (this was an input parameter in CAMEOS)
+		history_matrix = zeros(Float32, round(Int64, pop_size * 1.2), max_iter)
 
-            # Get the right PLL static weighting (rand is inside the loop later)
-            static_1st_weight = 0.5  # case pll_weights = "equal"
-            if pll_weights == "close2mark"
-                static_1st_weight = 1.0
-            elseif pll_weights == "close2deg"
-                static_1st_weight = 0.0
-            end
-
-			# Now we load this info into an ExChrome type object
-			cur_pop = types.ExChrome[]
-			for i in 1:length(success_chrom)
-				old = success_chrom[i]
-				new_chrom = types.ExChrome(
-                    old.path, old.full_sequence, old.deg_nuc, indie_deg_maps[i],
-                    old.deg_trns, old.deg_trne, old.deg_d, old.deg_skip,
-                    old.deg_insert, old.mark_nuc, indie_mark_maps[i],
-                    old.mark_trns, old.mark_trne, old.mark_d, old.mark_skip,
-                    old.mark_insert, fdp[i], deg_base_energy,
-                    deg_prot_mat[i:i, 1:end],
-                    utils.aa_vec_to_seq(deg_prot_mat[i:i, 1:end]),
-                    deg_ull[i], deg_pv_w1[i], deg_pv_w2[i:i, 1:end], fmp[i],
-                    mark_base_energy, mark_prot_mat[i:i, 1:end],
-                    utils.aa_vec_to_seq(mark_prot_mat[i:i, 1:end]), mark_ull[i],
-                    mark_pv_w1[i], mark_pv_w2[i:i, 1:end],
-                    pll_weights == "rand" ? rand() : static_1st_weight,
-                    0)
-				push!(cur_pop, new_chrom)
-			end
-
-			#There are occasionally differences between HMM/MRF models of the proteins, mostly because HMMs are more flexible with insertions.
-			#This generates mappings between positions in either data type.
-			mark_hmm_to_grem_map = std_setup.get_explicit_mapping(mark_grem_prot, mark_hmm)
-			deg_hmm_to_grem_map = std_setup.get_explicit_mapping(deg_grem_prot, deg_hmm)
-
-			@debug("Hey the explicit mapping for mark_hmm_to_grem is $mark_hmm_to_grem_map")
-			@debug("Hey the explicit mapping for deg_hmm_to_grem is $deg_hmm_to_grem_map")
-			#So now everything is in an extended chromosome object.
-
-			changed_seq = length(cur_pop)
-            rel_changed_seq = 1.0
-			no_change_iters = 0
-			iter = 0;
-
-			#Let's keep track of optimization history.
-            max_iter = 5000  # TO DO: Calculate a better limit (this was an input parameter in CAMEOS)
-			history_matrix = zeros(Float32, round(Int64, pop_size * 1.2), max_iter)
-
-			println("Beginning long-range optimization.")
-			@debug("About to start optimization.")
-			@debug(Libc.strftime(time()))
-
-			stop_early = false #a condition to evaluate every (few) iteration(s) to see if it's worth continuing a run. When true, we clean up and move to next gene pair.
-			not_worth_continuing = false
-
-			#Okay let's set up the energy normal distributions...
-
-			deg_energy_mu, deg_energy_sig = lookup.get_energy_params(deg_name, "energies/")
-			mark_energy_mu, mark_energy_sig = lookup.get_energy_params(mark_name, "energies/")
-
-			mark_energy_normal = Normal(mark_energy_mu, mark_energy_sig)
-			deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
-            
-			done_pop = types.ExChrome[]
-            unchanged_threshold::UInt16 = 1000  # Constant with the threshold for contiguous iterations without change to drop a seq from further optimization 
-            
-			while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400 && no_change_iters < 100)
-				sfv = sort(fitness_values)
-				#best_50 = sfv[50]
-
-				if iter % 25 == 0
-					println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]...")
-				end
-				@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
-				@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
-				@debug("  Best five were $(sfv[1:5])")
-				@debug("  ... and worse five were $(sfv[end-5:end]).")
-
-				flush(log_io)
-
-				#iterated conditional modes, multi-site keep-track = icm_multi_kt. keep track = store values of changes to sequence.
-				if do_cull
-					if iter < div(max_iter, 4)
-						@debug("Cull for iter $iter : no cutoff")
-						cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel) #, deg_energy_normal, mark_energy_normal)
-					elseif iter >= div(max_iter, 4) && iter < div(max_iter, 2)
-						@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 2)])")
-						cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 2)])
-					elseif iter >= div(max_iter, 2)
-						@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 4)])")
-						cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 4)])
-					end
-				else
-					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel)
-				end
-
-				fitness_values = optimize.assess_pop([done_pop; cur_pop])
-				summed_fitness = sum(fitness_values) #one of the things we should be watching.
-
-				push!(last_few_sf, summed_fitness)
-				push!(last_few_cs, changed_seq)
-
-                tmp_done_pop = types.ExChrome[]
-                tmp_done_pop = filter(v->v.unchanged>unchanged_threshold, cur_pop)
-                append!(done_pop, tmp_done_pop)
-                filter!(v->v.unchanged<=unchanged_threshold, cur_pop)
-                
-				indiv_count = 1
-				for indiv in fitness_values #history matrix stores values of function being optimized over time.
-					history_matrix[indiv_count, iter + 1] = indiv
-					indiv_count += 1
-				end
-
-				#This was originally just code to test the pseudolikelihoods decreasing correctly. It does.
-				#Now it's still sorta somewhat useful to log a few values of sequences in both deg/mark as optimization goes.
-				if (mod(iter, 50) == 0 && iter != 0)
-					@debug("Second opinion, these should be ~0.")
-					for i_count in 1:min(5, length(cur_pop))
-						#for the record this is not a good way to generate random numbers.
-						#doesn't go from 1 to end.
-						i = round(Int64, rand() * (length(cur_pop) - 1) + 1) # it was just = i_count
-
-						bel_deg = cur_pop[i].deg_prob
-						bel_mrk = cur_pop[i].mark_prob
-						#Sort of assuming that end-1 is because of a "*" at stop codon being added.
-						if length(strip(cur_pop[i].deg_seq, '*')) == deg_nNodes && length(strip(cur_pop[i].mark_seq, '*')) == mark_nNodes
-							cal_deg = mrf.psl(strip(cur_pop[i].deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, false)
-							cal_mrk = mrf.psl(strip(cur_pop[i].mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, false)
-							@debug("DEG: $bel_deg vs. $cal_deg")
-							@debug("MRK: $bel_mrk vs. $cal_mrk")
-							@debug(abs(bel_deg - cal_deg) < 1e-2)
-							@debug(abs(bel_mrk - cal_mrk) < 1e-2)
-						else
-							@debug("Proteins not correct length!")
-							@debug(cur_pop[i].mark_seq)
-							@debug(cur_pop[i].deg_seq)
-						end
-					end
-				end
-				if changed_seq == 0
-					no_change_iters += 1
-				else
-					no_change_iters = 0
-				end
-                rel_changed_seq = changed_seq/length(success_chrom)
-				iter += 1
-				@debug("\n")
-			end
-          
-			#So we're done the iterated conditional modes step. Now we report everything...
-            println("INFO: Optimization completed after iter $iter with $(rel_changed_seq*100)% changed seqs")
-			@debug("Done while loop after iter $iter with $(rel_changed_seq*100)% changed seqs!")
-			@debug(Libc.strftime(time()))
-
-            # Retrieve the remaining variants (if any) what were set to keep processing
-            append!(done_pop, cur_pop)
-            cur_pop = done_pop
-            
-            # Recalculate fitness for all the population and show stats
-			fitness_values = optimize.assess_pop(cur_pop)
-			sfv = sort(fitness_values)
-			@debug("FINAL iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
-			@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
-			@debug("  Best five are $(sfv[1:5])")
-			@debug("  ... and worse five are $(sfv[end-5:end]).")
-
-            # History matrix
-			@debug("Let us save the history matrix!")
-			save("$out_path/$(mark_name)_$(deg_name)_$frame/opt_his_mat_$(rand_barcode).jld", "hist_mat", history_matrix)
-
-			deg_significance = false
-			mark_significance = false #this sees if we get any hits worth keeping at all. If yes we save full population.
-			all_cal_deg_scores = Float64[]
-			all_cal_mark_scores = Float64[]
-			#If no we save just a few (top 10) individuals. These are top-6 overall + top-2 in deg and top-2 in mark.
-			out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/all_final_fitness_$(rand_barcode).txt", "w")
-			write(out_file, "Ind. #\tMark Score\tDeg Score\tMark Sign\tDeg Sign\n")
-			for last_indi in 1:length(cur_pop)
-				rep_deg = cur_pop[last_indi].deg_prob
-				rep_mrk = cur_pop[last_indi].mark_prob
-				if length(strip(cur_pop[last_indi].deg_seq, '*')) == deg_nNodes && length(strip(cur_pop[last_indi].mark_seq, '*')) == mark_nNodes
-					cal_deg = abs(mrf.psl(strip(cur_pop[last_indi].deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, false))
-					cal_mrk = abs(mrf.psl(strip(cur_pop[last_indi].mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, false))
-					special_deg = "-"
-					if cal_deg < mu_deg + sig_deg
-						special_deg = "***!"
-						deg_significance = true
-					elseif cal_deg < mu_deg + 2*sig_deg
-						special_deg = "**."
-						deg_significance = true
-					elseif cal_deg < mu_deg + 3*sig_deg
-						special_deg = "*?"
-						deg_significance = true
-					elseif cal_deg < mu_deg + 4*sig_deg #we don't mind keeping these.
-						deg_significance = true
-					end
-					special_mark = "-"
-					if cal_mrk < mu_mark + sig_mark
-						special_mark = "***!"
-						mark_significance = true
-					elseif cal_mrk < mu_mark + 2*sig_mark
-						special_mark = "**."
-						mark_significance = true
-					elseif cal_mrk < mu_mark + 3*sig_mark
-						special_mark = "*?"
-						mark_significance = true
-					elseif cal_mrk < mu_mark + 4*sig_mark #we don't mind keeping these.
-						mark_significance = true
-					end
-					push!(all_cal_mark_scores, cal_mrk)
-					push!(all_cal_deg_scores, cal_deg)
-					write(out_file, "$(last_indi)\t$(cal_mrk)\t$(cal_deg)\t$special_mark\t$special_deg\n")
-				else
-					push!(all_cal_mark_scores, Inf)
-					push!(all_cal_deg_scores, Inf)
-					write(out_file, "$(last_indi)\t-1.0\t-1.0\t/\t/\n")
-				end
-			end
-			close(out_file)
-
-			cal_deg_p = sortperm(all_cal_deg_scores)
-			cal_mark_p = sortperm(all_cal_mark_scores)
-			cal_both_p = sortperm(fitness_values)
-
-			@debug(Libc.strftime(time()))
-			if true #deg_significance && mark_significance
-				@debug("Let's save our optimized population...")
-				saved_pop = population_to_saveable(cur_pop;
-                                                   mark_wt_apll=mark_wt_apll,
-                                                   deg_wt_apll=deg_wt_apll)
-				save("$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld", "variants", saved_pop)
-			else #We want just a subset.
-				@debug("We'll save 12 interesting members of the population...")
-				selected_pop = ExChrome[]
-				for ijk in 1:3
-					push!(selected_pop, cur_pop[cal_deg_p[ijk]])
-					push!(selected_pop, cur_pop[cal_mark_p[ijk]])
-				end
-				for ijk in 1:6
-					push!(selected_pop, cur_pop[cal_both_p[ijk]])
-				end
-				save("$out_path/$(mark_name)_$(deg_name)_$frame/top_pop_$(rand_barcode).jld", "variants", selected_pop)
-			end
-
-			@debug("And we'll also output our top twelve sequences...")
-			out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/top_twelve_$(rand_barcode).fa", "w")
-
-			for ijk in 1:3
-				deg_ind = cal_deg_p[ijk]
-				write(out_file, ">TOP_DEG_d (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
-				write(out_file, "$(cur_pop[deg_ind].deg_seq)\n")
-				write(out_file, ">TOP_DEG_m (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
-				write(out_file, "$(cur_pop[deg_ind].mark_seq)\n")
-			end
-			for ijk in 1:3
-				deg_ind = cal_mark_p[ijk]
-				write(out_file, ">TOP_MARK_d (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
-				write(out_file, "$(cur_pop[deg_ind].deg_seq)\n")
-				write(out_file, ">TOP_MARK_m (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
-				write(out_file, "$(cur_pop[deg_ind].mark_seq)\n")
-			end
-			for ijk in 1:6
-				deg_ind = cal_both_p[ijk]
-				write(out_file, ">TOP_GEN_d (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
-				write(out_file, "$(cur_pop[deg_ind].deg_seq)\n")
-				write(out_file, ">TOP_GEN_m (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
-				write(out_file, "$(cur_pop[deg_ind].mark_seq)\n")
-			end
-			close(out_file)
-
-            @debug("Finally, we'll save some metadata of the run...")
-            metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
-            if !isfile(metadata_filename)
-			    out_file = open(metadata_filename, "w")  
-			    write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness\n") 
-            else
-			    out_file = open(metadata_filename, "a")                
-            end
-            write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(pll_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values)))\n")
-            close(out_file)
-        end
-		@debug("REALLY DONE!")
-
+		println("Beginning long-range optimization.")
+		@debug("About to start optimization.")
 		@debug(Libc.strftime(time()))
 
+		stop_early = false #a condition to evaluate every (few) iteration(s) to see if it's worth continuing a run. When true, we clean up and move to next gene pair.
+		not_worth_continuing = false
+
+		#Okay let's set up the energy normal distributions...
+
+		deg_energy_mu, deg_energy_sig = lookup.get_energy_params(deg_name, "energies/")
+		mark_energy_mu, mark_energy_sig = lookup.get_energy_params(mark_name, "energies/")
+
+		mark_energy_normal = Normal(mark_energy_mu, mark_energy_sig)
+		deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
+		
+		done_pop = types.ExChrome[]
+		unchanged_threshold::UInt16 = 1000  # Constant with the threshold for contiguous iterations without change to drop a seq from further optimization 
+		
+		while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400 && no_change_iters < 100)
+			sfv = sort(fitness_values)
+			#best_50 = sfv[50]
+
+			if iter % 25 == 0
+				println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]...")
+			end
+			@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
+			@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
+			@debug("  Best five were $(sfv[1:5])")
+			@debug("  ... and worse five were $(sfv[end-5:end]).")
+
+			flush(log_io)
+
+			#iterated conditional modes, multi-site keep-track = icm_multi_kt. keep track = store values of changes to sequence.
+			if do_cull
+				if iter < div(max_iter, 4)
+					@debug("Cull for iter $iter : no cutoff")
+					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel) #, deg_energy_normal, mark_energy_normal)
+				elseif iter >= div(max_iter, 4) && iter < div(max_iter, 2)
+					@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 2)])")
+					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 2)])
+				elseif iter >= div(max_iter, 2)
+					@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 4)])")
+					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 4)])
+				end
+			else
+				cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel)
+			end
+
+			fitness_values = optimize.assess_pop([done_pop; cur_pop])
+			summed_fitness = sum(fitness_values) #one of the things we should be watching.
+
+			push!(last_few_sf, summed_fitness)
+			push!(last_few_cs, changed_seq)
+
+			tmp_done_pop = types.ExChrome[]
+			tmp_done_pop = filter(v->v.unchanged>unchanged_threshold, cur_pop)
+			append!(done_pop, tmp_done_pop)
+			filter!(v->v.unchanged<=unchanged_threshold, cur_pop)
+			
+			indiv_count = 1
+			for indiv in fitness_values #history matrix stores values of function being optimized over time.
+				history_matrix[indiv_count, iter + 1] = indiv
+				indiv_count += 1
+			end
+
+			#This was originally just code to test the pseudolikelihoods decreasing correctly. It does.
+			#Now it's still sorta somewhat useful to log a few values of sequences in both deg/mark as optimization goes.
+			if (mod(iter, 50) == 0 && iter != 0)
+				@debug("Second opinion, these should be ~0.")
+				for i_count in 1:min(5, length(cur_pop))
+					#for the record this is not a good way to generate random numbers.
+					#doesn't go from 1 to end.
+					i = round(Int64, rand() * (length(cur_pop) - 1) + 1) # it was just = i_count
+
+					bel_deg = cur_pop[i].deg_prob
+					bel_mrk = cur_pop[i].mark_prob
+					#Sort of assuming that end-1 is because of a "*" at stop codon being added.
+					if length(strip(cur_pop[i].deg_seq, '*')) == deg_nNodes && length(strip(cur_pop[i].mark_seq, '*')) == mark_nNodes
+						cal_deg = mrf.psl(strip(cur_pop[i].deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, false)
+						cal_mrk = mrf.psl(strip(cur_pop[i].mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, false)
+						@debug("DEG: $bel_deg vs. $cal_deg")
+						@debug("MRK: $bel_mrk vs. $cal_mrk")
+						@debug(abs(bel_deg - cal_deg) < 1e-2)
+						@debug(abs(bel_mrk - cal_mrk) < 1e-2)
+					else
+						@debug("Proteins not correct length!")
+						@debug(cur_pop[i].mark_seq)
+						@debug(cur_pop[i].deg_seq)
+					end
+				end
+			end
+			if changed_seq == 0
+				no_change_iters += 1
+			else
+				no_change_iters = 0
+			end
+			rel_changed_seq = changed_seq/length(success_chrom)
+			iter += 1
+			@debug("\n")
+		end
+		
+		#So we're done the iterated conditional modes step. Now we report everything...
+		println("INFO: Optimization completed after iter $iter with $(rel_changed_seq*100)% changed seqs")
+		@debug("Done while loop after iter $iter with $(rel_changed_seq*100)% changed seqs!")
+		@debug(Libc.strftime(time()))
+
+		# Retrieve the remaining variants (if any) what were set to keep processing
+		append!(done_pop, cur_pop)
+		cur_pop = done_pop
+		
+		# Recalculate fitness for all the population and show stats
+		fitness_values = optimize.assess_pop(cur_pop)
+		sfv = sort(fitness_values)
+		@debug("FINAL iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
+		@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
+		@debug("  Best five are $(sfv[1:5])")
+		@debug("  ... and worse five are $(sfv[end-5:end]).")
+
+		# History matrix
+		@debug("Let us save the history matrix!")
+		save("$out_path/$(mark_name)_$(deg_name)_$frame/opt_his_mat_$(rand_barcode).jld", "hist_mat", history_matrix)
+
+		deg_significance = false
+		mark_significance = false #this sees if we get any hits worth keeping at all. If yes we save full population.
+		all_cal_deg_scores = Float64[]
+		all_cal_mark_scores = Float64[]
+		#If no we save just a few (top 10) individuals. These are top-6 overall + top-2 in deg and top-2 in mark.
+		out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/all_final_fitness_$(rand_barcode).txt", "w")
+		write(out_file, "Ind. #\tMark Score\tDeg Score\tMark Sign\tDeg Sign\n")
+		for last_indi in 1:length(cur_pop)
+			rep_deg = cur_pop[last_indi].deg_prob
+			rep_mrk = cur_pop[last_indi].mark_prob
+			if length(strip(cur_pop[last_indi].deg_seq, '*')) == deg_nNodes && length(strip(cur_pop[last_indi].mark_seq, '*')) == mark_nNodes
+				cal_deg = abs(mrf.psl(strip(cur_pop[last_indi].deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, false))
+				cal_mrk = abs(mrf.psl(strip(cur_pop[last_indi].mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, false))
+				special_deg = "-"
+				if cal_deg < mu_deg + sig_deg
+					special_deg = "***!"
+					deg_significance = true
+				elseif cal_deg < mu_deg + 2*sig_deg
+					special_deg = "**."
+					deg_significance = true
+				elseif cal_deg < mu_deg + 3*sig_deg
+					special_deg = "*?"
+					deg_significance = true
+				elseif cal_deg < mu_deg + 4*sig_deg #we don't mind keeping these.
+					deg_significance = true
+				end
+				special_mark = "-"
+				if cal_mrk < mu_mark + sig_mark
+					special_mark = "***!"
+					mark_significance = true
+				elseif cal_mrk < mu_mark + 2*sig_mark
+					special_mark = "**."
+					mark_significance = true
+				elseif cal_mrk < mu_mark + 3*sig_mark
+					special_mark = "*?"
+					mark_significance = true
+				elseif cal_mrk < mu_mark + 4*sig_mark #we don't mind keeping these.
+					mark_significance = true
+				end
+				push!(all_cal_mark_scores, cal_mrk)
+				push!(all_cal_deg_scores, cal_deg)
+				write(out_file, "$(last_indi)\t$(cal_mrk)\t$(cal_deg)\t$special_mark\t$special_deg\n")
+			else
+				push!(all_cal_mark_scores, Inf)
+				push!(all_cal_deg_scores, Inf)
+				write(out_file, "$(last_indi)\t-1.0\t-1.0\t/\t/\n")
+			end
+		end
+		close(out_file)
+
+		cal_deg_p = sortperm(all_cal_deg_scores)
+		cal_mark_p = sortperm(all_cal_mark_scores)
+		cal_both_p = sortperm(fitness_values)
+
+		@debug(Libc.strftime(time()))
+		if true #deg_significance && mark_significance
+			@debug("Let's save our optimized population...")
+			saved_pop = population_to_saveable(cur_pop;
+												mark_wt_apll=mark_wt_apll,
+												deg_wt_apll=deg_wt_apll)
+			save("$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld", "variants", saved_pop)
+		else #We want just a subset.
+			@debug("We'll save 12 interesting members of the population...")
+			selected_pop = ExChrome[]
+			for ijk in 1:3
+				push!(selected_pop, cur_pop[cal_deg_p[ijk]])
+				push!(selected_pop, cur_pop[cal_mark_p[ijk]])
+			end
+			for ijk in 1:6
+				push!(selected_pop, cur_pop[cal_both_p[ijk]])
+			end
+			save("$out_path/$(mark_name)_$(deg_name)_$frame/top_pop_$(rand_barcode).jld", "variants", selected_pop)
+		end
+
+		@debug("And we'll also output our top twelve sequences...")
+		out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/top_twelve_$(rand_barcode).fa", "w")
+
+		for ijk in 1:3
+			deg_ind = cal_deg_p[ijk]
+			write(out_file, ">TOP_DEG_d (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
+			write(out_file, "$(cur_pop[deg_ind].deg_seq)\n")
+			write(out_file, ">TOP_DEG_m (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
+			write(out_file, "$(cur_pop[deg_ind].mark_seq)\n")
+		end
+		for ijk in 1:3
+			deg_ind = cal_mark_p[ijk]
+			write(out_file, ">TOP_MARK_d (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
+			write(out_file, "$(cur_pop[deg_ind].deg_seq)\n")
+			write(out_file, ">TOP_MARK_m (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
+			write(out_file, "$(cur_pop[deg_ind].mark_seq)\n")
+		end
+		for ijk in 1:6
+			deg_ind = cal_both_p[ijk]
+			write(out_file, ">TOP_GEN_d (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
+			write(out_file, "$(cur_pop[deg_ind].deg_seq)\n")
+			write(out_file, ">TOP_GEN_m (ind $deg_ind ) (fit: $(fitness_values[deg_ind])) (deg: $(all_cal_deg_scores[deg_ind])) (mark: $(all_cal_mark_scores[deg_ind]))\n")
+			write(out_file, "$(cur_pop[deg_ind].mark_seq)\n")
+		end
+		close(out_file)
+
+		@debug("Finally, we'll save some metadata of the run...")
+		metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
+		if !isfile(metadata_filename)
+			out_file = open(metadata_filename, "w")  
+			write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness\n") 
+		else
+			out_file = open(metadata_filename, "a")                
+		end
+		write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(pll_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values)))\n")
+		close(out_file)
 	end
+	@debug("REALLY DONE!")
+
+	@debug(Libc.strftime(time()))
 end
 
 function parse_commandline()
@@ -451,7 +448,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.8 - May 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.9 - May 2022 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
@@ -526,8 +523,6 @@ function run_file()
 					write(problem_file,
                           "BC $rand_barcode ==> Problem $y processing line: $line\n")
                     flush(problem_file)
-                    close(problem_file)  # Remove if rethrow removed below
-                    rethrow()
 				end
 			end
 		end
