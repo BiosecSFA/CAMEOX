@@ -12,8 +12,8 @@ __copyright__ = 'Copyright (C) 2022 Jose Manuel Martí (LLNL)'
 __license__ = 'UNLICENSED'
 __maintainer__ = 'Jose Manuel Martí'
 __status__ = 'Pre-Alpha'
-__date__ = 'Apr 2022'
-__version__ = '0.0.4'
+__date__ = 'July 2022'
+__version__ = '0.0.5'
 
 import sys
 

@@ -668,35 +668,34 @@ def inv_avg_pdist_com(num_stds,
                       debug: bool = False,
                       results: List[Dict[str, Any]] = None,
                       ) -> float:
-    """Minimization target: inverse averaged pairwise distance for centers of mass"""
+    """Min target: inverse averaged pairwise distance for centers of mass"""
     H_zeroclipped = np.clip(
         H - (H_mean + num_stds * H_std),
         0, 1)  # Negative values to zero
-    (L, num_features) = scipy.ndimage.label(H_zeroclipped)
+    (L, num_feat) = scipy.ndimage.label(H_zeroclipped)
     com_avdist: float = 0.0
-    if num_features < 1:
+    if num_feat < 1:
         if results is not None:
             results.append(
-                {'num_features': num_features, 'weight': 0.0,
+                {'num_feat': num_feat, 'weight': 0.0,
                  'com_avdist': com_avdist, 'L': L})
         if debug:
-            print(
-                f' inv_avg_pdist_com: features={num_features}, so returning max value!')
+            print(f' inv_avg_pdist_com: #feat={num_feat} -> return max value!')
         # Deliver maximum value for undesired num_features
         return (float(np.finfo(float).max) / 10)
     com = scipy.ndimage.center_of_mass(
         H_zeroclipped, L, range(
-            1, num_features + 1))
+            1, num_feat + 1))
     com_pdist = scipy.spatial.distance.pdist(com, 'seuclidean')
     com_avdist = com_pdist.mean()
-    # Add 10% penalization for each diverging feature from the desired number
-    weight: float = 1 + penalization * abs(desired_features - num_features)
+    # Add penalization for each diverging feature from the desired number
+    weight: float = 1 + penalization * abs(desired_features - num_feat)
     if debug:
         print(
-            f' inv_avg_pdist_com: features={num_features}\t weight={weight}\t com_avdist={com_avdist}')
+            f' inv_avg_pdist_com: #feat={num_feat}\t weight={weight}\t com_avdist={com_avdist}')
     if results is not None:
         results.append(
-            {'num_features': num_features, 'weight': weight,
+            {'num_feat': num_feat, 'weight': weight,
              'com_avdist': com_avdist, 'L': L})
     return weight / com_avdist
 
@@ -705,7 +704,8 @@ def search_overdensities(H: np.ndarray,
                          overdensities: int = 3,
                          penalization: float = 0.1,
                          std_max: float = 5.0,  # Max std from mean to explore
-                         verbose: bool = False) -> pd.DataFrame:
+                         verbose: bool = False,
+                         debug: bool = False) -> pd.DataFrame:
     """Search for different number of overdensities"""
 
     # Mask bins with no variants (0.0) in the APLL space so they are not
@@ -716,7 +716,6 @@ def search_overdensities(H: np.ndarray,
     H_std: float = H_ma.std()
     desired_features: int = overdensities
     results: List[Dict[str, Any]] = []
-    debug: bool = False
     # Call to the minimizator
     res = scipy.optimize.minimize_scalar(
         inv_avg_pdist_com, bounds=(0, 5), method='bounded',
@@ -782,13 +781,14 @@ def plot_overdensities(X: np.ndarray,
 def sample_overdensities(dset: pd.DataFrame,
                          protA: str,
                          protB: str,
-                        size: int = 500,
+                         size: int = 500,
                          bins: int = 25,
                          overdensities: int = 3,
                          penalization: float = 0.1,
                          erp: float = None,
                          sampled: SampleSet = None,
-                         verbose: bool = False) -> pd.DataFrame:
+                         verbose: bool = False,
+                         debug: bool = False) -> pd.DataFrame:
     """Sample variants from APLL overdensities.
     """
 
@@ -818,7 +818,7 @@ def sample_overdensities(dset: pd.DataFrame,
 
     # Search for the right number of overdensities
     (res, results, locs) = search_overdensities(
-        H, overdensities, penalization, verbose=verbose)
+        H, overdensities, penalization, verbose=verbose, debug=debug)
 
     vprint('>> Optimization results <<')
     vprint(res)
