@@ -243,14 +243,14 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			continue #we skip this guy, the sequence stops changing.
 		end
 
-		num_muts = 1
+		num_muts = rand((1,2,3))
 		full_len = length(individual.full_sequence)
 		unif_len = DiscreteUniform(1, full_len - 3)
 		ind_seq = individual.full_sequence[1:end]
 		new_seq = ""
 		for mut in 1:num_muts
 			site = rand(unif_len)
-			mut_len = 3 #floor(Int64, rand() * 3) + 2 #number of nucleotides modified (from 2-4).
+			mut_len = floor(Int64, rand() * 3) + 2 #number of nucleotides modified (from 2-4).
 			mutated_nucs = site:(site+mut_len)
 			all_deg_aa_pos = Int64[]
 			all_mark_aa_pos = Int64[] #potentially more than one aa getting hit.
@@ -259,7 +259,7 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			not_set, all_mark_aa_pos, all_deg_aa_pos = acceptable_muts(site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
 			while not_set
 				site = rand(unif_len)
-				mut_len = 3 #4 guarantees two aas hit... more generally, floor(Int64, rand() * 3) + 2 migh work.
+				mut_len = floor(Int64, rand() * 3) + 2 #migh work.
 				mutated_nucs = site:(site+mut_len)
 				not_set, all_mark_aa_pos, all_deg_aa_pos = acceptable_muts(site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
 			end
