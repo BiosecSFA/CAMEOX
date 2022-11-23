@@ -514,7 +514,8 @@ function run_file()
                                             short_hmm, long_hmm,
                                             pop_size, frame,
                                             rel_change_thr, host_tid,
-                                            pll_weights)
+                                            pll_weights,
+                                            actually_mrf=false)
 					end
 
 					flush(log_io)
