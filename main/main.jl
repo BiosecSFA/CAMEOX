@@ -19,7 +19,8 @@ using ArgParse, Logging, JLD, StatsBase, Distributions, Random, Statistics
 Aux: Get a JLD saveable population of variants
 """
 function population_to_saveable(cur_pop;
-                                deg_wt_apll::Float32=0, mark_wt_apll::Float32=0)
+                                deg_wt_apll::Float32=0.0,
+								 mark_wt_apll::Float32=0.0)
 	new_pop = types.SaveChrome[]
 
 	for indiv in cur_pop
@@ -124,14 +125,16 @@ function set_up_and_optimize(
 		@debug("$mark_name seq: $mark_seq")
 		mark_ali_seq = uppercase(std_setup.align_consensus(mark_seq, mark_hmm))
 		@debug("$mark_name aligned seq: $mark_ali_seq")            
-		mark_wt_apll::Float32 = mrf.psl(strip(mark_ali_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, true)
+		mark_wt_apll::Float32 = mrf.psl(strip(mark_ali_seq, '*'),
+		 mark_gremodel.w1, mark_gremodel.w2, true)
 		@debug("$mark_name APLL: $mark_wt_apll")                       
 		# For deg
 		deg_seq = prot_seqs[deg_name]
 		@debug("$deg_name seq: $deg_seq")
 		deg_ali_seq = uppercase(std_setup.align_consensus(deg_seq, deg_hmm))
 		@debug("$deg_name aligned seq: $deg_ali_seq")              
-		deg_wt_apll::Float32 = mrf.psl(strip(deg_ali_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, true)
+		deg_wt_apll::Float32 = mrf.psl(strip(deg_ali_seq, '*'),
+		 deg_gremodel.w1, deg_gremodel.w2, true)
 		@debug("$deg_name APLL: $deg_wt_apll")            
 	end
 
@@ -143,8 +146,10 @@ function set_up_and_optimize(
 	if actually_mrf
 		founding_fitness_values = fitness_values[1:end]
 
-		mark_base_energy = mrf.basic_energy_calc(mark_grem_prot, mark_gremodel.w1, mark_gremodel.w2)
-		deg_base_energy = mrf.basic_energy_calc(deg_grem_prot, deg_gremodel.w1, deg_gremodel.w2)
+		mark_base_energy = mrf.basic_energy_calc(
+			mark_grem_prot, mark_gremodel.w1, mark_gremodel.w2)
+		deg_base_energy = mrf.basic_energy_calc(
+			deg_grem_prot, deg_gremodel.w1, deg_gremodel.w2)
 
 		# Get the right PLL static weighting (rand is inside the loop later)
 		static_1st_weight = 0.5  # case pll_weights = "equal"
@@ -156,7 +161,7 @@ function set_up_and_optimize(
 
 		# Now we load this info into an ExChrome type object
 		cur_pop = types.ExChrome[]
-		for i in 1:length(success_chrom)
+		for i in eachindex(success_chrom)
 			old = success_chrom[i]
 			new_chrom = types.ExChrome(
 				old.path, old.full_sequence, old.deg_nuc, indie_deg_maps[i],
@@ -229,16 +234,22 @@ function set_up_and_optimize(
 			if do_cull
 				if iter < div(max_iter, 4)
 					@debug("Cull for iter $iter : no cutoff")
-					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel) #, deg_energy_normal, mark_energy_normal)
+					cur_pop, changed_seq = optimize.icm_multi_kt(
+						cur_pop, deg_gremodel, mark_gremodel) #, deg_energy_normal, mark_energy_normal)
 				elseif iter >= div(max_iter, 4) && iter < div(max_iter, 2)
 					@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 2)])")
-					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 2)])
+					cur_pop, changed_seq = optimize.icm_multi_kt(
+						cur_pop, deg_gremodel, mark_gremodel;
+						score_cutoff = sfv[div(length(sfv), 2)])
 				elseif iter >= div(max_iter, 2)
 					@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 4)])")
-					cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel; score_cutoff = sfv[div(length(sfv), 4)])
+					cur_pop, changed_seq = optimize.icm_multi_kt(
+						cur_pop, deg_gremodel, mark_gremodel;
+						score_cutoff = sfv[div(length(sfv), 4)])
 				end
 			else
-				cur_pop, changed_seq = optimize.icm_multi_kt(cur_pop, deg_gremodel, mark_gremodel)
+				cur_pop, changed_seq = optimize.icm_multi_kt(
+					cur_pop, deg_gremodel, mark_gremodel)
 			end
 
 			fitness_values = optimize.assess_pop([done_pop; cur_pop])
@@ -270,9 +281,14 @@ function set_up_and_optimize(
 					bel_deg = cur_pop[i].deg_prob
 					bel_mrk = cur_pop[i].mark_prob
 					#Sort of assuming that end-1 is because of a "*" at stop codon being added.
-					if length(strip(cur_pop[i].deg_seq, '*')) == deg_nNodes && length(strip(cur_pop[i].mark_seq, '*')) == mark_nNodes
-						cal_deg = mrf.psl(strip(cur_pop[i].deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, false)
-						cal_mrk = mrf.psl(strip(cur_pop[i].mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, false)
+					if (length(strip(cur_pop[i].deg_seq, '*')) == deg_nNodes 
+							&& length(strip(cur_pop[i].mark_seq, '*')) == mark_nNodes)
+						cal_deg = mrf.psl(
+							strip(cur_pop[i].deg_seq, '*'), deg_gremodel.w1,
+							 deg_gremodel.w2, false)
+						cal_mrk = mrf.psl(
+							strip(cur_pop[i].mark_seq, '*'), mark_gremodel.w1,
+							 mark_gremodel.w2, false)
 						@debug("DEG: $bel_deg vs. $cal_deg")
 						@debug("MRK: $bel_mrk vs. $cal_mrk")
 						@debug(abs(bel_deg - cal_deg) < 1e-2)
@@ -322,12 +338,17 @@ function set_up_and_optimize(
 		#If no we save just a few (top 10) individuals. These are top-6 overall + top-2 in deg and top-2 in mark.
 		out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/all_final_fitness_$(rand_barcode).txt", "w")
 		write(out_file, "Ind. #\tMark Score\tDeg Score\tMark Sign\tDeg Sign\n")
-		for last_indi in 1:length(cur_pop)
+		for last_indi in eachindex(cur_pop)
 			rep_deg = cur_pop[last_indi].deg_prob
 			rep_mrk = cur_pop[last_indi].mark_prob
-			if length(strip(cur_pop[last_indi].deg_seq, '*')) == deg_nNodes && length(strip(cur_pop[last_indi].mark_seq, '*')) == mark_nNodes
-				cal_deg = abs(mrf.psl(strip(cur_pop[last_indi].deg_seq, '*'), deg_gremodel.w1, deg_gremodel.w2, false))
-				cal_mrk = abs(mrf.psl(strip(cur_pop[last_indi].mark_seq, '*'), mark_gremodel.w1, mark_gremodel.w2, false))
+			if (length(strip(cur_pop[last_indi].deg_seq, '*')) == deg_nNodes
+					&& length(strip(cur_pop[last_indi].mark_seq, '*')) == mark_nNodes)
+				cal_deg = abs(
+					mrf.psl(strip(cur_pop[last_indi].deg_seq, '*'),
+					deg_gremodel.w1, deg_gremodel.w2, false))
+				cal_mrk = abs(
+					mrf.psl(strip(cur_pop[last_indi].mark_seq, '*'),
+					mark_gremodel.w1, mark_gremodel.w2, false))
 				special_deg = "-"
 				if cal_deg < mu_deg + sig_deg
 					special_deg = "***!"
@@ -372,10 +393,11 @@ function set_up_and_optimize(
 		@debug(Libc.strftime(time()))
 		if true #deg_significance && mark_significance
 			@debug("Let's save our optimized population...")
-			saved_pop = population_to_saveable(cur_pop;
-												mark_wt_apll=mark_wt_apll,
-												deg_wt_apll=deg_wt_apll)
-			save("$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld", "variants", saved_pop)
+			saved_pop = population_to_saveable(
+				cur_pop;
+				mark_wt_apll=mark_wt_apll, deg_wt_apll=deg_wt_apll)
+			save("$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld",
+				"variants", saved_pop)
 		else #We want just a subset.
 			@debug("We'll save 12 interesting members of the population...")
 			selected_pop = ExChrome[]
@@ -386,7 +408,8 @@ function set_up_and_optimize(
 			for ijk in 1:6
 				push!(selected_pop, cur_pop[cal_both_p[ijk]])
 			end
-			save("$out_path/$(mark_name)_$(deg_name)_$frame/top_pop_$(rand_barcode).jld", "variants", selected_pop)
+			save("$out_path/$(mark_name)_$(deg_name)_$frame/top_pop_$(rand_barcode).jld",
+				"variants", selected_pop)
 		end
 
 		@debug("And we'll also output our top twelve sequences...")
@@ -436,7 +459,7 @@ function parse_commandline()
 	@add_arg_table s begin
 		"commands"
 			help = "positional argument, path to file with tab-delimited commands to run (default: example.txt)"
-			default = "example.txt"
+			default = "aroB_infA_pf5_uref100_debug.txt"
 		"--num"
 			help = "optional, experimentally used for running multiple jobs at once"
 			default = "0"
@@ -448,7 +471,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.9 - May 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.10 - Nov 2022 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	command_file = parsed_args["commands"]
@@ -523,6 +546,7 @@ function run_file()
 					write(problem_file,
                           "BC $rand_barcode ==> Problem $y processing line: $line\n")
                     flush(problem_file)
+					rethrow()
 			exit(1)
 				end
 			end
