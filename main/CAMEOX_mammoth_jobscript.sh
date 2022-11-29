@@ -8,8 +8,8 @@
 # USAGE:
 # sbatch CAMEOX_mammoth_jobscript.sh <CAMEOX_params_file>
 
-export OMP_NUM_THREADS=128
+export OMP_NUM_THREADS=256
 cd /usr/workspace/kpath/cameos/CAMEOX/main/
 echo 'CAMEOX starts...'
-/usr/gapps/julia/bin/julia-1.7.2 -t 128 main.jl $1
+/usr/gapps/julia/bin/julia-1.8.3 -t 256 main.jl $1
 echo 'CAMEOX run DONE!'
