@@ -547,7 +547,6 @@ function run_file()
                           "BC $rand_barcode ==> Problem $y processing line: $line\n")
                     flush(problem_file)
 					rethrow()
-			exit(1)
 				end
 			end
 		end
