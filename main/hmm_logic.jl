@@ -253,7 +253,7 @@ function redo_alignment(grem_text, sample_nucs, is_mark_not_deg)
 		last_normal = 1
 		while_flag = false
 
-		for char in 1:length(grem_text)
+		for char in eachindex(grem_text)
 			if !(islower(grem_text[char]))
 				hmm_pos += 1
 			end

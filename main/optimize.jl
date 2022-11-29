@@ -35,7 +35,7 @@ function ca_ds_kt(wt_vec, nNodes, w1, w2, wt_ull, pv_w1, pv_w2, mut_start, mut_e
 	cur_aas = Int64[]
 	sub_prot = wt_vec[region][1:end]
 	cur_aa = findnext(isone, sub_prot, 1)
-	while cur_aa != nothing
+	while cur_aa !== nothing
 		push!(cur_aas, cur_aa)
 		cur_aa = findnext(isone, sub_prot, cur_aa + 1)
 	end
@@ -213,7 +213,10 @@ function acceptable_muts(site, mutated_nucs, individual, deg_nNodes, mark_nNodes
 	return not_set, all_mark_aa_pos, all_deg_aa_pos
 end
 
-function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_normal = false; use_energy = false, score_cutoff = 0) #this expects Normal objects for logpdf fun.
+function icm_multi_kt(
+	population, deg_grem, mark_grem, deg_normal = false, mark_normal = false;
+	use_energy = false, score_cutoff = 0
+) #this expects Normal objects for logpdf fun.
 	#This will allow for than one nucleotide to be changed at once by doing a 2-way aa psl calculation.
 	mark_seqs = AbstractString[]
 	deg_seqs = AbstractString[]
@@ -229,7 +232,8 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 	mark_nNodes = mark_grem.nNodes
 
 	Threads.@threads for (idx, individual) in collect(enumerate(population))
-		if div(length(individual.deg_vec), 21) != deg_nNodes || div(length(individual.mark_vec), 21) != mark_nNodes
+		if (div(length(individual.deg_vec), 21) != deg_nNodes
+				|| div(length(individual.mark_vec), 21) != mark_nNodes)
 			@debug("WARNING! Trouble with individual $idx at optimize.icm_mlti_kt(). Skipping...")
 			continue
 		end
@@ -239,29 +243,32 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
             #continue
         #end
         
-		if score_cutoff != 0 && (abs(individual.deg_prob) + abs(individual.mark_prob)) > score_cutoff #we can choose to only optimize individuals below a score cut-off past a certain point of optimization.
+		if (score_cutoff != 0
+			&& (abs(individual.deg_prob) + abs(individual.mark_prob)) > score_cutoff) #we can choose to only optimize individuals below a score cut-off past a certain point of optimization.
 			continue #we skip this guy, the sequence stops changing.
 		end
 
-		num_muts = rand((1,2,3))
+		num_muts = rand(1:3)
 		full_len = length(individual.full_sequence)
 		unif_len = DiscreteUniform(1, full_len - 3)
-		ind_seq = individual.full_sequence[1:end]
+		old_seq = individual.full_sequence[1:end]
 		new_seq = ""
 		for mut in 1:num_muts
 			site = rand(unif_len)
-			mut_len = floor(Int64, rand() * 3) + 2 #number of nucleotides modified (from 2-4).
+			mut_len = rand(2:4) #floor(Int64, rand() * 3) + 2 #number of nucleotides modified (from 2-4).
 			mutated_nucs = site:(site+mut_len)
 			all_deg_aa_pos = Int64[]
 			all_mark_aa_pos = Int64[] #potentially more than one aa getting hit.
 			not_set = false
 
-			not_set, all_mark_aa_pos, all_deg_aa_pos = acceptable_muts(site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
+			not_set, all_mark_aa_pos, all_deg_aa_pos = acceptable_muts(
+				site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
 			while not_set
 				site = rand(unif_len)
 				mut_len = floor(Int64, rand() * 3) + 2 #migh work.
 				mutated_nucs = site:(site+mut_len)
-				not_set, all_mark_aa_pos, all_deg_aa_pos = acceptable_muts(site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
+				not_set, all_mark_aa_pos, all_deg_aa_pos = acceptable_muts(
+					site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
 			end
 
 			unique_all_mark_aa_pos = sort(unique(all_mark_aa_pos))
@@ -299,7 +306,8 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			dna_nuc_counter = 1
 			for dna_nucs in mut_dna_options
 
-				tmp_deg_codon = join(deg_codon[1:(deg_start_pos - 1)]) * (dna_nucs) * join(deg_codon[(deg_start_pos + mut_len):end])
+				tmp_deg_codon = (join(deg_codon[1:(deg_start_pos - 1)])
+					* (dna_nucs) * join(deg_codon[(deg_start_pos + mut_len):end]))
 				if tmp_deg_codon == join(deg_codon)
 					original_nucs = dna_nuc_counter
 				end
@@ -310,7 +318,8 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			dna_nuc_counter = 1
 			for dna_nucs in mut_dna_options
 
-				tmp_mark_codon = join(mark_codon[1:(mark_start_pos - 1)]) * (dna_nucs) * join(mark_codon[(mark_start_pos + mut_len):end])
+				tmp_mark_codon = (join(mark_codon[1:(mark_start_pos - 1)])
+					* (dna_nucs) * join(mark_codon[(mark_start_pos + mut_len):end]))
 				if tmp_mark_codon == join(mark_codon)
 					original_nucs = dna_nuc_counter
 				end
@@ -323,12 +332,18 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			mark_possibilities = filter(z -> !(21 in z), unique(resulting_mark_aas))
 
 			#And then it becomes time to actually compute all these options via some _kt() function.
-			deg_ull_opt, deg_pv_w1_opt, deg_pv_w2_opt, deg_psl_opt, deg_cads_map = ca_ds_kt(individual.deg_vec, deg_nNodes, deg_w1, deg_w2, individual.deg_ull, individual.deg_pv_w1, individual.deg_pv_w2, unique_all_deg_aa_pos[1], unique_all_deg_aa_pos[2], deg_possibilities)
+			deg_ull_opt, deg_pv_w1_opt, deg_pv_w2_opt, deg_psl_opt, deg_cads_map = ca_ds_kt(
+				individual.deg_vec, deg_nNodes, deg_w1, deg_w2, individual.deg_ull,
+				individual.deg_pv_w1, individual.deg_pv_w2, unique_all_deg_aa_pos[1],
+				unique_all_deg_aa_pos[2], deg_possibilities)
 
-			mark_ull_opt, mark_pv_w1_opt, mark_pv_w2_opt, mark_psl_opt, mark_cads_map = ca_ds_kt(individual.mark_vec, mark_nNodes, mark_w1, mark_w2, individual.mark_ull, individual.mark_pv_w1, individual.mark_pv_w2, unique_all_mark_aa_pos[1], unique_all_mark_aa_pos[2], mark_possibilities)
+			mark_ull_opt, mark_pv_w1_opt, mark_pv_w2_opt, mark_psl_opt, mark_cads_map = ca_ds_kt(
+				individual.mark_vec, mark_nNodes, mark_w1, mark_w2, individual.mark_ull,
+				individual.mark_pv_w1, individual.mark_pv_w2, unique_all_mark_aa_pos[1],
+				unique_all_mark_aa_pos[2], mark_possibilities)
 
 			final_options = zeros(Float32, length(mut_dna_options))
-			for iii in 1:length(mut_dna_options)
+			for iii in eachindex(mut_dna_options)
 				if (!(21 in resulting_deg_aas[iii])
                     && !(21 in resulting_mark_aas[iii])) #no stop codons allowed!
 					if use_energy && mark_normal && deg_normal
@@ -361,35 +376,45 @@ function icm_multi_kt(population, deg_grem, mark_grem, deg_normal = false, mark_
 			best_deg_aa = resulting_deg_aas[min_choice]
 			best_mark_aa = resulting_mark_aas[min_choice]
 
-			new_seq = ind_seq[1:(site - 1)] * mut_dna_options[min_choice] * ind_seq[(site + mut_len):end]
-
-			if new_seq != ind_seq
-				Threads.atomic_add!(changed_seq, 1)
-                individual.unchanged == 0  # Reset to 0 since the seq changed
-            else
-                individual.unchanged += 1  # Seq unchanged
-			end
+			new_seq = (individual.full_sequence[1:(site - 1)] *
+			 mut_dna_options[min_choice] *
+			  individual.full_sequence[(site + mut_len):end])
 
 			new_deg_dna = new_seq[individual.deg_trns:individual.deg_trne]
 			new_mark_dna = new_seq[individual.mark_trns:individual.mark_trne]
 
-			individual.deg_nuc = types.MRF_nuc(new_deg_dna, individual.deg_nuc.skip_sam, individual.deg_nuc.skip_trn, individual.deg_nuc.gap_pos)
-			individual.mark_nuc = types.MRF_nuc(new_mark_dna, individual.mark_nuc.skip_sam, individual.mark_nuc.skip_trn, individual.mark_nuc.gap_pos)
+			individual.deg_nuc = types.MRF_nuc(new_deg_dna, individual.deg_nuc.skip_sam,
+				individual.deg_nuc.skip_trn, individual.deg_nuc.gap_pos)
+			individual.mark_nuc = types.MRF_nuc(new_mark_dna, individual.mark_nuc.skip_sam,
+				individual.mark_nuc.skip_trn, individual.mark_nuc.gap_pos)
 
-			individual.deg_seq = strip(uppercase(bio_seq.translate_constrained_maybe_map(individual.deg_nuc, individual.deg_trns, do_map = false)), '*')
-			individual.mark_seq = strip(uppercase(bio_seq.translate_constrained_maybe_map(individual.mark_nuc, individual.mark_trns, do_map = false)), '*')
+			individual.deg_seq = strip(uppercase(bio_seq.translate_constrained_maybe_map(
+				individual.deg_nuc, individual.deg_trns, do_map = false)), '*')
+			individual.mark_seq = strip(uppercase(bio_seq.translate_constrained_maybe_map(
+				individual.mark_nuc, individual.mark_trns, do_map = false)), '*')
 
-			individual.deg_vec, individual.deg_ull = bio_seq.convert_protein(individual.deg_seq), deg_ull_opt[deg_cads_map[best_deg_aa]]
-			individual.deg_pv_w1, individual.deg_pv_w2 = deg_pv_w1_opt[deg_cads_map[best_deg_aa]], vec(deg_pv_w2_opt[deg_cads_map[best_deg_aa], 1:end])'
+			individual.deg_vec = bio_seq.convert_protein(individual.deg_seq)
+			individual.deg_ull = deg_ull_opt[deg_cads_map[best_deg_aa]]
+			individual.deg_pv_w1 = deg_pv_w1_opt[deg_cads_map[best_deg_aa]]
+			individual.deg_pv_w2 = vec(deg_pv_w2_opt[deg_cads_map[best_deg_aa], 1:end])'
 			individual.deg_prob = deg_psl_opt[deg_cads_map[best_deg_aa]]
 
-			individual.mark_vec, individual.mark_ull = bio_seq.convert_protein(individual.mark_seq), mark_ull_opt[mark_cads_map[best_mark_aa]]
-			individual.mark_pv_w1, individual.mark_pv_w2 = mark_pv_w1_opt[mark_cads_map[best_mark_aa]], vec(mark_pv_w2_opt[mark_cads_map[best_mark_aa], 1:end])'
+			individual.mark_vec = bio_seq.convert_protein(individual.mark_seq)
+			individual.mark_ull = mark_ull_opt[mark_cads_map[best_mark_aa]]
+			individual.mark_pv_w1 = mark_pv_w1_opt[mark_cads_map[best_mark_aa]]
+			individual.mark_pv_w2 = vec(mark_pv_w2_opt[mark_cads_map[best_mark_aa], 1:end])'
 			individual.mark_prob = mark_psl_opt[mark_cads_map[best_mark_aa]]
 
 			individual.full_sequence = new_seq[1:end]
-
 		end
+
+		if new_seq != old_seq
+			Threads.atomic_add!(changed_seq, 1)
+			individual.unchanged == 0  # Reset to 0 since the seq changed
+		else
+			individual.unchanged += 1  # Seq unchanged
+		end
+
 	end
 	return population, changed_seq[]
 end
@@ -474,7 +499,7 @@ end
 
 function assess_pop(population)
 	fitness_values = Float32[]
-	for i in 1:length(population)
+	for i in eachindex(population)
 		push!(fitness_values, abs(population[i].deg_prob) + abs(population[i].mark_prob))
 	end
 	return fitness_values
