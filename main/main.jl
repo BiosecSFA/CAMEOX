@@ -456,7 +456,8 @@ end
 
 function parse_commandline()
 	s = ArgParseSettings()
-	@add_arg_table s begin
+
+	@add_arg_table! s begin
 		"commands"
 			help = "positional argument, path to file with tab-delimited commands to run (default: example.txt)"
 			default = "aroB_infA_pf5_uref100_debug.txt"
@@ -467,6 +468,7 @@ function parse_commandline()
 			help = "optional, used for parallelizing each job within a node"
 			default = "1"
 	end
+
 	return parse_args(s)
 end
 

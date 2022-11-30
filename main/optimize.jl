@@ -252,7 +252,7 @@ function icm_multi_kt(
 		full_len = length(individual.full_sequence)
 		unif_len = DiscreteUniform(1, full_len - 3)
 		old_seq = individual.full_sequence[1:end]
-		new_seq = ""
+		new_seq = old_seq  # After the loop we'll check if the seq is updated
 		for mut in 1:num_muts
 			site = rand(unif_len)
 			mut_len = rand(2:4) #floor(Int64, rand() * 3) + 2 #number of nucleotides modified (from 2-4).
@@ -367,11 +367,14 @@ function icm_multi_kt(
                                 individual.deg_base_E))
 					end
 				else
-					final_options[iii] = 1_000_000.0
+					final_options[iii] = Inf32
 				end
 			end
 
 			min_score, min_choice = findmin(final_options)
+			if min_score === Inf32  # If despite guardrails we hit a stop codon, abort this iteration
+				continue
+			end
 
 			best_deg_aa = resulting_deg_aas[min_choice]
 			best_mark_aa = resulting_mark_aas[min_choice]
