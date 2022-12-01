@@ -198,7 +198,7 @@ function set_up_and_optimize(
 		max_iter = 5000  # TO DO: Calculate a better limit (this was an input parameter in CAMEOS)
 		history_matrix = zeros(Float32, round(Int64, pop_size * 1.2), max_iter)
 
-		println("Beginning long-range optimization.")
+		println("Beginning MRF-based optimization for $(length(cur_pop)) seeds...")
 		@debug("About to start optimization.")
 		@debug(Libc.strftime(time()))
 
@@ -221,7 +221,7 @@ function set_up_and_optimize(
 			#best_50 = sfv[50]
 
 			if iter % 25 == 0
-				println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]...")
+				println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]")
 			end
 			@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
 			@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
@@ -458,14 +458,14 @@ function parse_commandline()
 	s = ArgParseSettings()
 
 	@add_arg_table! s begin
-		"commands"
-			help = "positional argument, path to file with tab-delimited commands to run (default: example.txt)"
+		"tasks"
+			help = "positional argument, path to TSV file with tasks (entanglements) to process"
 			default = "aroB_infA_pf5_uref100_debug.txt"
 		"--num"
-			help = "optional, experimentally used for running multiple jobs at once"
+			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
 			default = "0"
 		"--threads"
-			help = "optional, used for parallelizing each job within a node"
+			help = "[CAMEOS legacy] used for parallelizing each job within a node"
 			default = "1"
 	end
 
@@ -476,7 +476,7 @@ function run_file()
     println("=-= CAMEOX = CAMEOs eXtended =-= v0.10 - Nov 2022 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
-	command_file = parsed_args["commands"]
+	task_file = parsed_args["tasks"]
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
 
@@ -487,8 +487,8 @@ function run_file()
 		sleep(rand() * 2) #randomly delay start to de-synchronize starts of runs.
 	end
 
-	if isfile(command_file)
-		in_file = open(command_file)
+	if isfile(task_file)
+		in_file = open(task_file)
 		in_read = readlines(in_file)
 		close(in_file)
 
@@ -554,7 +554,7 @@ function run_file()
 		end
 		close(problem_file)
 	else
-		println("$command_file does not exist. Exiting.")
+		println("$task_file does not exist. Exiting.")
 	end
 
 end
