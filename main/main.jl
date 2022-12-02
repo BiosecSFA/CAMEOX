@@ -53,6 +53,7 @@ Arguments:
 	pop_size : size of population, i.e. number of individual HMM solutions to greedily optimize.
 	frame : p1/p2.
 	rel_change_thr : minimum threshold for the relative number of variants changing, used for setting a dynamic limit on the number of iterations.
+	max_iter : hard limit to the number of iterations during the MRF-based optimization
     host_tid : NCBI Taxonomic ID for the host of the entanglement, used by the host generalization subsystem (default of 562 for E. coli)
     pll_weights:  control the selection of PLL weights for the entanglement pair with the following choices:
                 equal (CAMEOS default), rand (paper and CAMEOX default), close2mark, close2deg. 
@@ -63,8 +64,9 @@ Arguments:
 """
 function set_up_and_optimize(
     log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
-    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, host_tid = 562,
-    pll_weights = "rand"; X_range=false, Y_range=false, actually_mrf = true)
+    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, max_iter;
+	host_tid = 562, pll_weights = "rand",
+	X_range = false, Y_range = false, actually_mrf = true)
 
 	@debug("Beginning run.")
 	@debug(Libc.strftime(time()))
@@ -195,7 +197,6 @@ function set_up_and_optimize(
 		iter = 0;
 
 		#Let's keep track of optimization history.
-		max_iter = 5000  # TO DO: Calculate a better limit (this was an input parameter in CAMEOS)
 		history_matrix = zeros(Float32, round(Int64, pop_size * 1.2), max_iter)
 
 		println("Beginning MRF-based optimization for $(length(cur_pop)) seeds...")
@@ -461,6 +462,13 @@ function parse_commandline()
 		"tasks"
 			help = "positional argument, path to TSV file with tasks (entanglements) to process"
 			default = "aroB_infA_pf5_uref100_debug.txt"
+		"--maxiter", "-m"
+			help = "hard limit to the number of iterations in the MRF-based optimization"
+			arg_type = Int
+			default = 5000
+		"--nomrf"
+			help = "skip the MRF-based optimization"
+			action = :store_true		
 		"--num"
 			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
 			default = "0"
@@ -473,10 +481,12 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.10 - Nov 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.11 - Dec 2022 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	task_file = parsed_args["tasks"]
+	max_iter = parsed_args["maxiter"]
+	no_mrf = parsed_args["nomrf"]
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
 
@@ -538,8 +548,10 @@ function run_file()
                                             short_jld, long_jld,
                                             short_hmm, long_hmm,
                                             pop_size, frame,
-                                            rel_change_thr, host_tid,
-                                            pll_weights)
+                                            rel_change_thr, max_iter;
+											host_tid = host_tid, pll_weights = pll_weights,
+											actually_mrf = !no_mrf,
+											)
 					end
 
 					flush(log_io)
@@ -548,7 +560,7 @@ function run_file()
 					write(problem_file,
                           "BC $rand_barcode ==> Problem $y processing line: $line\n")
                     flush(problem_file)
-					rethrow()
+					rethrow()  # TODO: Remove in stable release or move to debug mode
 				end
 			end
 		end
