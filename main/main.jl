@@ -64,9 +64,10 @@ Arguments:
 """
 function set_up_and_optimize(
     log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
-    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, max_iter;
+    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, max_iter, mut_num, mut_len;
 	host_tid = 562, pll_weights = "rand",
-	X_range = false, Y_range = false, actually_mrf = true)
+	X_range = false, Y_range = false, actually_mrf = true,
+	)
 
 	@debug("Beginning run.")
 	@debug(Libc.strftime(time()))
@@ -236,21 +237,25 @@ function set_up_and_optimize(
 				if iter < div(max_iter, 4)
 					@debug("Cull for iter $iter : no cutoff")
 					cur_pop, changed_seq = optimize.icm_multi_kt(
-						cur_pop, deg_gremodel, mark_gremodel) #, deg_energy_normal, mark_energy_normal)
+						cur_pop, deg_gremodel, mark_gremodel,
+						mut_num = mut_num, mut_len = mut_len) #, deg_energy_normal, mark_energy_normal)
 				elseif iter >= div(max_iter, 4) && iter < div(max_iter, 2)
 					@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 2)])")
 					cur_pop, changed_seq = optimize.icm_multi_kt(
 						cur_pop, deg_gremodel, mark_gremodel;
-						score_cutoff = sfv[div(length(sfv), 2)])
+						score_cutoff = sfv[div(length(sfv), 2)],
+						mut_num = mut_num, mut_len = mut_len)
 				elseif iter >= div(max_iter, 2)
 					@debug("Cull for iter $iter : cutoff is $(sfv[div(length(sfv), 4)])")
 					cur_pop, changed_seq = optimize.icm_multi_kt(
 						cur_pop, deg_gremodel, mark_gremodel;
-						score_cutoff = sfv[div(length(sfv), 4)])
+						score_cutoff = sfv[div(length(sfv), 4)],
+						mut_num = mut_num, mut_len = mut_len)
 				end
 			else
 				cur_pop, changed_seq = optimize.icm_multi_kt(
-					cur_pop, deg_gremodel, mark_gremodel)
+					cur_pop, deg_gremodel, mark_gremodel;
+					mut_num = mut_num, mut_len = mut_len)
 			end
 
 			fitness_values = optimize.assess_pop([done_pop; cur_pop])
@@ -469,12 +474,21 @@ function parse_commandline()
 		"--nomrf"
 			help = "skip the MRF-based optimization"
 			action = :store_true		
+		"--mutnum", "-n"
+			help = "Integer number of mutations or 'rand' (random for each iteration)"
+			range_tester = (x-> x=="rand" || 0 < parse(Int64,x))
+			default = "1"
+ 		"--mutlen", "-l"
+			help = "Integer length of the mutation or 'rand' (random for each iteration)"
+			range_tester = (x-> x=="rand" || 0 < parse(Int64,x)) 
+			default = "3"			
 		"--num"
 			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
 			default = "0"
 		"--threads"
 			help = "[CAMEOS legacy] used for parallelizing each job within a node"
 			default = "1"
+
 	end
 
 	return parse_args(s)
@@ -487,6 +501,8 @@ function run_file()
 	task_file = parsed_args["tasks"]
 	max_iter = parsed_args["maxiter"]
 	no_mrf = parsed_args["nomrf"]
+	mut_num = parsed_args["mutnum"]
+	mut_len = parsed_args["mutlen"]
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
 
@@ -548,9 +564,10 @@ function run_file()
                                             short_jld, long_jld,
                                             short_hmm, long_hmm,
                                             pop_size, frame,
-                                            rel_change_thr, max_iter;
+                                            rel_change_thr, max_iter,
+											mut_num, mut_len;
 											host_tid = host_tid, pll_weights = pll_weights,
-											actually_mrf = !no_mrf,
+											actually_mrf = !no_mrf, 
 											)
 					end
 
