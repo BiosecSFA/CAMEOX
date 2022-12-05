@@ -215,7 +215,8 @@ end
 
 function icm_multi_kt(
 	population, deg_grem, mark_grem, deg_normal = false, mark_normal = false;
-	use_energy = false, score_cutoff = 0
+	use_energy = false, score_cutoff = 0,
+	mut_num = "1", mut_len = "3",
 ) #this expects Normal objects for logpdf fun.
 	#This will allow for than one nucleotide to be changed at once by doing a 2-way aa psl calculation.
 	mark_seqs = AbstractString[]
@@ -243,20 +244,20 @@ function icm_multi_kt(
             #continue
         #end
         
-		if (score_cutoff != 0
+		if (score_cutoff != 0  # This is CAMEOS' "cull"
 			&& (abs(individual.deg_prob) + abs(individual.mark_prob)) > score_cutoff) #we can choose to only optimize individuals below a score cut-off past a certain point of optimization.
 			continue #we skip this guy, the sequence stops changing.
 		end
 
-		num_muts = rand(1:3)
+		num_mut = (mut_num == "rand") ? rand(1:3) : parse(Int64, string(mut_num))  # from mut_num to num_mut
 		full_len = length(individual.full_sequence)
 		unif_len = DiscreteUniform(1, full_len - 3)
 		old_seq = individual.full_sequence[1:end]
 		new_seq = old_seq  # After the loop we'll check if the seq is updated
-		for mut in 1:num_muts
+		for mut in 1:num_mut
 			site = rand(unif_len)
-			mut_len = rand(2:4) #floor(Int64, rand() * 3) + 2 #number of nucleotides modified (from 2-4).
-			mutated_nucs = site:(site+mut_len)
+			len_mut = (mut_len == "rand") ? rand(2:4) : parse(Int64, string(mut_len))  # from mut_len to len_mut
+			mutated_nucs = site:(site + len_mut)
 			all_deg_aa_pos = Int64[]
 			all_mark_aa_pos = Int64[] #potentially more than one aa getting hit.
 			not_set = false
@@ -265,8 +266,8 @@ function icm_multi_kt(
 				site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
 			while not_set
 				site = rand(unif_len)
-				mut_len = floor(Int64, rand() * 3) + 2 #migh work.
-				mutated_nucs = site:(site+mut_len)
+				len_mut = rand(2:4) #migh work.
+				mutated_nucs = site:(site + len_mut)
 				not_set, all_mark_aa_pos, all_deg_aa_pos = acceptable_muts(
 					site, mutated_nucs, individual, deg_nNodes, mark_nNodes)
 			end
@@ -300,14 +301,14 @@ function icm_multi_kt(
 
 			resulting_deg_aas = Tuple{Int64, Int64}[]
 			resulting_mark_aas = Tuple{Int64, Int64}[]
-			mut_dna_options = mut_base_options[mut_len]
+			mut_dna_options = mut_base_options[len_mut]
 
 			original_nucs = ""
 			dna_nuc_counter = 1
 			for dna_nucs in mut_dna_options
 
 				tmp_deg_codon = (join(deg_codon[1:(deg_start_pos - 1)])
-					* (dna_nucs) * join(deg_codon[(deg_start_pos + mut_len):end]))
+					* (dna_nucs) * join(deg_codon[(deg_start_pos + len_mut):end]))
 				if tmp_deg_codon == join(deg_codon)
 					original_nucs = dna_nuc_counter
 				end
@@ -319,7 +320,7 @@ function icm_multi_kt(
 			for dna_nucs in mut_dna_options
 
 				tmp_mark_codon = (join(mark_codon[1:(mark_start_pos - 1)])
-					* (dna_nucs) * join(mark_codon[(mark_start_pos + mut_len):end]))
+					* (dna_nucs) * join(mark_codon[(mark_start_pos + len_mut):end]))
 				if tmp_mark_codon == join(mark_codon)
 					original_nucs = dna_nuc_counter
 				end
@@ -381,7 +382,7 @@ function icm_multi_kt(
 
 			new_seq = (individual.full_sequence[1:(site - 1)] *
 			 mut_dna_options[min_choice] *
-			  individual.full_sequence[(site + mut_len):end])
+			  individual.full_sequence[(site + len_mut):end])
 
 			new_deg_dna = new_seq[individual.deg_trns:individual.deg_trne]
 			new_mark_dna = new_seq[individual.mark_trns:individual.mark_trne]
