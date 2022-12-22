@@ -13,7 +13,8 @@ include("optimize.jl")
 include("mrf.jl")
 include("bio_seq.jl")
 
-using ArgParse, Logging, JLD, StatsBase, Distributions, Random, Statistics
+using ArgParse, Logging, JLD, StatsBase, Distributions, Random, Statistics, Dates, FileIO
+#using Gtk, Profile, ProfileView
 
 """
 Aux: Get a JLD saveable population of variants
@@ -53,7 +54,10 @@ Arguments:
 	pop_size : size of population, i.e. number of individual HMM solutions to greedily optimize.
 	frame : p1/p2.
 	rel_change_thr : minimum threshold for the relative number of variants changing, used for setting a dynamic limit on the number of iterations.
+	unchanged_thr : threshold for number of contiguous iterations without change to drop a seq from further optimization 
 	max_iter : hard limit to the number of iterations during the MRF-based optimization
+	mut_num : number of mutations per iteration as specified by CAMEOX input argument
+	mut_len : length of mutations per iteration as specified by CAMEOX input argument	
     host_tid : NCBI Taxonomic ID for the host of the entanglement, used by the host generalization subsystem (default of 562 for E. coli)
     pll_weights:  control the selection of PLL weights for the entanglement pair with the following choices:
                 equal (CAMEOS default), rand (paper and CAMEOX default), close2mark, close2deg. 
@@ -64,10 +68,12 @@ Arguments:
 """
 function set_up_and_optimize(
     log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
-    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, max_iter, mut_num, mut_len;
+    mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, unchanged_thr, max_iter,
+	mut_num, mut_len;
 	host_tid = 562, pll_weights = "rand",
 	X_range = false, Y_range = false, actually_mrf = true,
 	)
+
 
 	@debug("Beginning run.")
 	@debug(Libc.strftime(time()))
@@ -194,7 +200,6 @@ function set_up_and_optimize(
 
 		changed_seq = length(cur_pop)
 		rel_changed_seq = 1.0
-		no_change_iters = 0
 		iter = 0;
 
 		#Let's keep track of optimization history.
@@ -216,9 +221,8 @@ function set_up_and_optimize(
 		deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
 		
 		done_pop = types.ExChrome[]
-		unchanged_threshold::UInt16 = 1000  # Constant with the threshold for contiguous iterations without change to drop a seq from further optimization 
 		
-		while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400 && no_change_iters < 100)
+		while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400)
 			sfv = sort(fitness_values)
 			#best_50 = sfv[50]
 
@@ -265,9 +269,9 @@ function set_up_and_optimize(
 			push!(last_few_cs, changed_seq)
 
 			tmp_done_pop = types.ExChrome[]
-			tmp_done_pop = filter(v->v.unchanged>unchanged_threshold, cur_pop)
+			tmp_done_pop = filter(v->v.unchanged>unchanged_thr, cur_pop)
 			append!(done_pop, tmp_done_pop)
-			filter!(v->v.unchanged<=unchanged_threshold, cur_pop)
+			filter!(v->v.unchanged<=unchanged_thr, cur_pop)
 			
 			indiv_count = 1
 			for indiv in fitness_values #history matrix stores values of function being optimized over time.
@@ -306,11 +310,6 @@ function set_up_and_optimize(
 					end
 				end
 			end
-			if changed_seq == 0
-				no_change_iters += 1
-			else
-				no_change_iters = 0
-			end
 			rel_changed_seq = changed_seq/length(success_chrom)
 			iter += 1
 			@debug("\n")
@@ -335,7 +334,9 @@ function set_up_and_optimize(
 
 		# History matrix
 		@debug("Let us save the history matrix!")
-		save("$out_path/$(mark_name)_$(deg_name)_$frame/opt_his_mat_$(rand_barcode).jld", "hist_mat", history_matrix)
+		FileIO.save(
+			"$out_path/$(mark_name)_$(deg_name)_$frame/opt_his_mat_$(rand_barcode).jld",
+			"hist_mat", history_matrix)
 
 		deg_significance = false
 		mark_significance = false #this sees if we get any hits worth keeping at all. If yes we save full population.
@@ -402,7 +403,8 @@ function set_up_and_optimize(
 			saved_pop = population_to_saveable(
 				cur_pop;
 				mark_wt_apll=mark_wt_apll, deg_wt_apll=deg_wt_apll)
-			save("$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld",
+			FileIO.save(
+				"$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld",
 				"variants", saved_pop)
 		else #We want just a subset.
 			@debug("We'll save 12 interesting members of the population...")
@@ -414,7 +416,8 @@ function set_up_and_optimize(
 			for ijk in 1:6
 				push!(selected_pop, cur_pop[cal_both_p[ijk]])
 			end
-			save("$out_path/$(mark_name)_$(deg_name)_$frame/top_pop_$(rand_barcode).jld",
+			FileIO.save(
+				"$out_path/$(mark_name)_$(deg_name)_$frame/top_pop_$(rand_barcode).jld",
 				"variants", selected_pop)
 		end
 
@@ -448,11 +451,11 @@ function set_up_and_optimize(
 		metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
 		if !isfile(metadata_filename)
 			out_file = open(metadata_filename, "w")  
-			write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness\n") 
+			write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness,unchanged_thr,mut_num,mut_len,datetime\n") 
 		else
 			out_file = open(metadata_filename, "a")                
 		end
-		write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(pll_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values)))\n")
+		write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(pll_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values))),$(unchanged_thr),$(mut_num),$(mut_len),$(now())\n")
 		close(out_file)
 	end
 	@debug("REALLY DONE!")
@@ -471,6 +474,10 @@ function parse_commandline()
 			help = "hard limit to the number of iterations in the MRF-based optimization"
 			arg_type = Int
 			default = 5000
+		"--unchanged", "-u"
+			help = "hard limit to the number of iterations in the MRF-based optimization"
+			arg_type = Int
+			default = 500			
 		"--nomrf"
 			help = "skip the MRF-based optimization"
 			action = :store_true		
@@ -495,11 +502,12 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.11 - Dec 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.12 - Dec 2022 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	task_file = parsed_args["tasks"]
 	max_iter = parsed_args["maxiter"]
+	unchanged_thr = parsed_args["unchanged"]
 	no_mrf = parsed_args["nomrf"]
 	mut_num = parsed_args["mutnum"]
 	mut_len = parsed_args["mutlen"]
@@ -564,7 +572,7 @@ function run_file()
                                             short_jld, long_jld,
                                             short_hmm, long_hmm,
                                             pop_size, frame,
-                                            rel_change_thr, max_iter,
+                                            rel_change_thr, unchanged_thr, max_iter,
 											mut_num, mut_len;
 											host_tid = host_tid, pll_weights = pll_weights,
 											actually_mrf = !no_mrf, 
@@ -589,6 +597,16 @@ function run_file()
 end
 
 @time run_file()
+#@profile run_file()
+#open("CAMEOX_prof.txt", "w") do s
+#    Profile.print(IOContext(s, :displaysize => (24, 500)))
+#end
+#
+#win = Gtk.Window("gtkwait")
+#ProfileView.view()
+#if !isinteractive()
+#    @async Gtk.gtk_main()
+#    Gtk.waitforsignal(win,:destroy)
+#end
 
 end
-
