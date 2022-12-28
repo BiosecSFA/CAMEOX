@@ -70,10 +70,9 @@ function set_up_and_optimize(
     log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
     mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, unchanged_thr, max_iter,
 	mut_num, mut_len;
-	host_tid = 562, pll_weights = "rand",
+	host_tid = 562, pll_weights = "rand", gc_iter = 1,
 	X_range = false, Y_range = false, actually_mrf = true,
 	)
-
 
 	@debug("Beginning run.")
 	@debug(Libc.strftime(time()))
@@ -221,7 +220,10 @@ function set_up_and_optimize(
 		deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
 		
 		done_pop = types.ExChrome[]
-		
+
+		### MAIN LOOP: MRF-based optimization ###	
+		GC.gc(true) # Force a full GC before the loop
+		GC.enable(false)
 		while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400)
 			sfv = sort(fitness_values)
 			#best_50 = sfv[50]
@@ -260,6 +262,11 @@ function set_up_and_optimize(
 				cur_pop, changed_seq = optimize.icm_multi_kt(
 					cur_pop, deg_gremodel, mark_gremodel;
 					mut_num = mut_num, mut_len = mut_len)
+			end
+			if iter % gc_iter == 0
+				GC.enable(true)
+				GC.gc(false) # Force GC after icm_multi_kt
+				GC.enable(false)
 			end
 
 			fitness_values = optimize.assess_pop([done_pop; cur_pop])
@@ -314,7 +321,8 @@ function set_up_and_optimize(
 			iter += 1
 			@debug("\n")
 		end
-		
+		GC.enable(true)
+
 		#So we're done the iterated conditional modes step. Now we report everything...
 		println("INFO: Optimization completed after iter $iter with $(rel_changed_seq*100)% changed seqs")
 		@debug("Done while loop after iter $iter with $(rel_changed_seq*100)% changed seqs!")
@@ -488,7 +496,11 @@ function parse_commandline()
  		"--mutlen", "-l"
 			help = "Integer length of the mutation or 'rand' (random for each iteration)"
 			range_tester = (x-> x=="rand" || 0 < parse(Int64,x)) 
-			default = "3"			
+			default = "3"
+		"--gciter"
+			help = "(advanced) Number of MRF-based optimization iterations per GC event"
+			arg_type = Int
+			default = 1						
 		"--num"
 			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
 			default = "0"
@@ -502,7 +514,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.12 - Dec 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.13 - Dec 2022 =-= LLNL =-=")
 	parsed_args = parse_commandline()
 
 	task_file = parsed_args["tasks"]
@@ -511,8 +523,13 @@ function run_file()
 	no_mrf = parsed_args["nomrf"]
 	mut_num = parsed_args["mutnum"]
 	mut_len = parsed_args["mutlen"]
+	gc_iter = parsed_args["gciter"]
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
+
+	if gc_iter > 1
+		println("CAUTION: MRF iters per GC event higher than default. Check mem usage!")
+	end
 
 	RUN_I = parse(Int64, num)
 	NUM_THREADS = parse(Int64, threads)
@@ -575,6 +592,7 @@ function run_file()
                                             rel_change_thr, unchanged_thr, max_iter,
 											mut_num, mut_len;
 											host_tid = host_tid, pll_weights = pll_weights,
+											gc_iter = gc_iter,
 											actually_mrf = !no_mrf, 
 											)
 					end
@@ -596,12 +614,13 @@ function run_file()
 
 end
 
+GC.enable_logging(true)
 @time run_file()
+
 #@profile run_file()
 #open("CAMEOX_prof.txt", "w") do s
 #    Profile.print(IOContext(s, :displaysize => (24, 500)))
 #end
-#
 #win = Gtk.Window("gtkwait")
 #ProfileView.view()
 #if !isinteractive()
