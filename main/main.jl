@@ -13,7 +13,7 @@ include("optimize.jl")
 include("mrf.jl")
 include("bio_seq.jl")
 
-using ArgParse, Logging, JLD, StatsBase, Distributions, Random, Statistics, Dates, FileIO
+using ArgParse, Dates, Distributions, FileIO, JLD, Logging, Random, Statistics, StatsBase
 #using Gtk, Profile, ProfileView
 
 """
@@ -205,6 +205,7 @@ function set_up_and_optimize(
 		history_matrix = zeros(Float32, round(Int64, pop_size * 1.2), max_iter)
 
 		println("Beginning MRF-based optimization for $(length(cur_pop)) seeds...")
+		flush(stdout)
 		@debug("About to start optimization.")
 		@debug(Libc.strftime(time()))
 
@@ -222,14 +223,17 @@ function set_up_and_optimize(
 		done_pop = types.ExChrome[]
 
 		### MAIN LOOP: MRF-based optimization ###	
-		GC.gc(true) # Force a full GC before the loop
-		GC.enable(false)
+		if gc_iter > 0
+			GC.gc(true) # Force a full GC before the loop
+			GC.enable(false)
+		end
 		while (rel_changed_seq > rel_change_thr && iter < max_iter) #&& !(stop_early) # && minimum((fitness_values)) > 400)
 			sfv = sort(fitness_values)
 			#best_50 = sfv[50]
 
 			if iter % 25 == 0
 				println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]")
+				flush(stdout)
 			end
 			@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
 			@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
@@ -263,7 +267,7 @@ function set_up_and_optimize(
 					cur_pop, deg_gremodel, mark_gremodel;
 					mut_num = mut_num, mut_len = mut_len)
 			end
-			if iter % gc_iter == 0
+			if (gc_iter > 0) && (iter % gc_iter == 0)
 				GC.enable(true)
 				GC.gc(false) # Force GC after icm_multi_kt
 				GC.enable(false)
@@ -321,10 +325,11 @@ function set_up_and_optimize(
 			iter += 1
 			@debug("\n")
 		end
-		GC.enable(true)
+		(gc_iter > 0) && GC.enable(true)
 
 		#So we're done the iterated conditional modes step. Now we report everything...
 		println("INFO: Optimization completed after iter $iter with $(rel_changed_seq*100)% changed seqs")
+		flush(stdout)
 		@debug("Done while loop after iter $iter with $(rel_changed_seq*100)% changed seqs!")
 		@debug(Libc.strftime(time()))
 
@@ -459,15 +464,23 @@ function set_up_and_optimize(
 		metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
 		if !isfile(metadata_filename)
 			out_file = open(metadata_filename, "w")  
-			write(out_file, "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness,unchanged_thr,mut_num,mut_len,datetime\n") 
+			write(out_file,
+			 "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness,unchanged_thr,mut_num,mut_len,datetime,elapsed,threads\n") 
 		else
 			out_file = open(metadata_filename, "a")                
 		end
-		write(out_file, "$(rand_barcode),$(mark_name),$(deg_name),$(pop_size),$(frame),$(rel_change_thr),$(pll_weights),$(mark_wt_apll),$(deg_wt_apll),$(rel_changed_seq),$(iter),$(max_iter),$(sfv[1]),$(sfv[end]),$(mean((fitness_values))),$(std((fitness_values))),$(unchanged_thr),$(mut_num),$(mut_len),$(now())\n")
+		println(out_file,
+		 rand_barcode, ',', mark_name, ',', deg_name, ',', pop_size, ',', frame, ',',
+		 rel_change_thr, ',', pll_weights, ',', mark_wt_apll, ',', deg_wt_apll, ',',
+		 rel_changed_seq, ',', iter, ',', max_iter, ',', sfv[1], ',', sfv[end], ',', 
+		 mean(fitness_values), ',', std(fitness_values), ',', unchanged_thr, ',',
+		 mut_num, ',', mut_len, ',', round(now(), Dates.Second), ',', 
+		 Dates.format(Dates.Time(Dates.Nanosecond(now() - INI_TIME)), "HH:MM:SS"),',', 
+		 Threads.nthreads()
+		 )
 		close(out_file)
 	end
-	@debug("REALLY DONE!")
-
+	@debug("CAMEOX DONE!")
 	@debug(Libc.strftime(time()))
 end
 
@@ -498,9 +511,9 @@ function parse_commandline()
 			range_tester = (x-> x=="rand" || 0 < parse(Int64,x)) 
 			default = "3"
 		"--gciter"
-			help = "(advanced) Number of MRF-based optimization iterations per GC event"
+			help = "Number of MRF-based optimization iterations per GC event (0 disables)"
 			arg_type = Int
-			default = 1						
+			default = 1
 		"--num"
 			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
 			default = "0"
@@ -515,8 +528,9 @@ end
 
 function run_file()
     println("=-= CAMEOX = CAMEOs eXtended =-= v0.13 - Dec 2022 =-= LLNL =-=")
-	parsed_args = parse_commandline()
+	flush(stdout)
 
+	parsed_args = parse_commandline()
 	task_file = parsed_args["tasks"]
 	max_iter = parsed_args["maxiter"]
 	unchanged_thr = parsed_args["unchanged"]
@@ -527,9 +541,9 @@ function run_file()
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
 
-	if gc_iter > 1
-		println("CAUTION: MRF iters per GC event higher than default. Check mem usage!")
-	end
+	gc_iter > 1 && println(
+		"CAUTION: GC_iter=", gc_iter, " is larger than default. Check memory usage!")
+	flush(stdout)
 
 	RUN_I = parse(Int64, num)
 	NUM_THREADS = parse(Int64, threads)
@@ -614,8 +628,9 @@ function run_file()
 
 end
 
+const INI_TIME = now()
 GC.enable_logging(true)
-@time run_file()
+@timev run_file()
 
 #@profile run_file()
 #open("CAMEOX_prof.txt", "w") do s
