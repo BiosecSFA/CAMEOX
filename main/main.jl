@@ -65,13 +65,15 @@ Arguments:
 						Ranges are defined in terms of the end of the sequence, so if you have a 70 aa sequence you want to start at position 80,
 						set the range to be something like 150:151. Generally some buffer around this value (i.e. 150:160) is useful.
 						Don't set, or set to false if you don't care where the genes overlap.
+	actually_mrf: flag controlling whether doing MRF-based optimization
+	debug: debugging flag
 """
 function set_up_and_optimize(
     log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
     mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, unchanged_thr, max_iter,
 	mut_num, mut_len;
 	host_tid = 562, pll_weights = "rand", gc_iter = 1,
-	X_range = false, Y_range = false, actually_mrf = true,
+	X_range = false, Y_range = false, actually_mrf = true, debug = false,
 	)
 
 	@debug("Beginning run.")
@@ -94,6 +96,7 @@ function set_up_and_optimize(
 
 	@debug("Stat param vars (mark / deg):\t$(mu_mark)\t$(sig_mark)\t$(mu_deg)\t$(sig_deg)")
 
+	# TODO: Expose gen_samples and candidate JLD file as input arguments
 	gen_samples = true #this is true if starting from scratch (general case), false if we have some candidates to optimize ahead of time.
 	population = types.Chromosome[]
 	local mark_grem_prot, deg_grem_prot
@@ -124,8 +127,7 @@ function set_up_and_optimize(
 	end
 
 	# Get (anti)pseudolikelihood for WT sequences
-	write_apll_wt = true
-	if write_apll_wt
+	function get_apll_wt()
 		prot_seqs = bio_seq.load_fasta("proteins.fasta")
 		local deg_seq, mark_seq
 		# For mark
@@ -133,7 +135,7 @@ function set_up_and_optimize(
 		@debug("$mark_name seq: $mark_seq")
 		mark_ali_seq = uppercase(std_setup.align_consensus(mark_seq, mark_hmm))
 		@debug("$mark_name aligned seq: $mark_ali_seq")            
-		mark_wt_apll::Float32 = mrf.psl(strip(mark_ali_seq, '*'),
+		mark_wt_apll = mrf.psl(strip(mark_ali_seq, '*'),
 		 mark_gremodel.w1, mark_gremodel.w2, true)
 		@debug("$mark_name APLL: $mark_wt_apll")                       
 		# For deg
@@ -141,15 +143,18 @@ function set_up_and_optimize(
 		@debug("$deg_name seq: $deg_seq")
 		deg_ali_seq = uppercase(std_setup.align_consensus(deg_seq, deg_hmm))
 		@debug("$deg_name aligned seq: $deg_ali_seq")              
-		deg_wt_apll::Float32 = mrf.psl(strip(deg_ali_seq, '*'),
+		deg_wt_apll = mrf.psl(strip(deg_ali_seq, '*'),
 		 deg_gremodel.w1, deg_gremodel.w2, true)
-		@debug("$deg_name APLL: $deg_wt_apll")            
+		@debug("$deg_name APLL: $deg_wt_apll")
+		# return WT APLLs
+		return mark_wt_apll, deg_wt_apll     
 	end
+	mark_wt_apll::Float32, deg_wt_apll::Float32 = get_apll_wt()
 
 	#Look through generated candidates, check their fitness values and their correctness.
 	success_chrom, fdp, fmp, fitness_values, indie_deg_maps, indie_mark_maps, deg_ull, deg_pv_w1, deg_pv_w2, deg_prot_mat, mark_ull, mark_pv_w1, mark_pv_w2, mark_prot_mat = optimize.assess_founders(population, mark_gremodel.nNodes, mark_gremodel.w1, mark_gremodel.w2, deg_gremodel.nNodes, deg_gremodel.w1, deg_gremodel.w2)
 
-	@debug("Num success... $(length(success_chrom))")
+	@debug("Num of successful seeds... $(length(success_chrom))")
 
 	if actually_mrf
 		founding_fitness_values = fitness_values[1:end]
@@ -231,16 +236,15 @@ function set_up_and_optimize(
 			sfv = sort(fitness_values)
 			#best_50 = sfv[50]
 
-			if iter % 25 == 0
+			if debug || iter % 25 == 0
 				println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]")
 				flush(stdout)
+				@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
+				@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
+				@debug("  Best five were $(sfv[1:5])")
+				@debug("  ... and worse five were $(sfv[end-5:end]).")
+				flush(log_io)
 			end
-			@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
-			@debug("  Fitness stats: mean=$(mean((fitness_values))) std=$(std((fitness_values)))")
-			@debug("  Best five were $(sfv[1:5])")
-			@debug("  ... and worse five were $(sfv[end-5:end]).")
-
-			flush(log_io)
 
 			#iterated conditional modes, multi-site keep-track = icm_multi_kt. keep track = store values of changes to sequence.
 			if do_cull
@@ -465,7 +469,7 @@ function set_up_and_optimize(
 		if !isfile(metadata_filename)
 			out_file = open(metadata_filename, "w")  
 			write(out_file,
-			 "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness,unchanged_thr,mut_num,mut_len,datetime,elapsed,threads\n") 
+			 "rand_barcode,mark_name,deg_name,pop_size,frame,rel_change_thr,pll_weights,mark_wt_apll,deg_wt_apll,rel_changed_seq,iters,max_iters,sfv_top,sfv_end,mean_fitness,std_fitness,unchanged_thr,mut_num,mut_len,datetime,elapsed,threads,gc_iter\n")
 		else
 			out_file = open(metadata_filename, "a")                
 		end
@@ -475,8 +479,8 @@ function set_up_and_optimize(
 		 rel_changed_seq, ',', iter, ',', max_iter, ',', sfv[1], ',', sfv[end], ',', 
 		 mean(fitness_values), ',', std(fitness_values), ',', unchanged_thr, ',',
 		 mut_num, ',', mut_len, ',', round(now(), Dates.Second), ',', 
-		 Dates.format(Dates.Time(Dates.Nanosecond(now() - INI_TIME)), "HH:MM:SS"),',', 
-		 Threads.nthreads()
+		 Dates.format(Dates.Time(Dates.Nanosecond(now() - INI_TIME)), "HH:MM:SS"), ',',
+		 Threads.nthreads(), ',', gc_iter
 		 )
 		close(out_file)
 	end
@@ -503,17 +507,20 @@ function parse_commandline()
 			help = "skip the MRF-based optimization"
 			action = :store_true		
 		"--mutnum", "-n"
-			help = "Integer number of mutations or 'rand' (random for each iteration)"
+			help = "integer number of mutations or 'rand' (random for each iteration)"
 			range_tester = (x-> x=="rand" || 0 < parse(Int64,x))
 			default = "1"
  		"--mutlen", "-l"
-			help = "Integer length of the mutation or 'rand' (random for each iteration)"
+			help = "integer length of the mutation or 'rand' (random for each iteration)"
 			range_tester = (x-> x=="rand" || 0 < parse(Int64,x)) 
 			default = "3"
 		"--gciter"
-			help = "Number of MRF-based optimization iterations per GC event (0 disables)"
+			help = "number of MRF-based optimization iterations per GC event (0 disables)"
 			arg_type = Int
 			default = 1
+		"--debug", "-g"
+			help = "print debugging information"
+			action = :store_true
 		"--num"
 			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
 			default = "0"
@@ -527,7 +534,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.13 - Dec 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.14 - Jan 2022 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
@@ -538,8 +545,17 @@ function run_file()
 	mut_num = parsed_args["mutnum"]
 	mut_len = parsed_args["mutlen"]
 	gc_iter = parsed_args["gciter"]
+	debug = parsed_args["debug"]
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
+
+	if debug
+		GC.enable_logging(true)
+		println("These CAMEOX command arguments are in effect:")
+		for key in keys(parsed_args)
+			println("  > '", key, "' is ", parsed_args[key])
+		end
+	end
 
 	gc_iter > 1 && println(
 		"CAUTION: GC_iter=", gc_iter, " is larger than default. Check memory usage!")
@@ -607,7 +623,7 @@ function run_file()
 											mut_num, mut_len;
 											host_tid = host_tid, pll_weights = pll_weights,
 											gc_iter = gc_iter,
-											actually_mrf = !no_mrf, 
+											actually_mrf = !no_mrf, debug = debug,
 											)
 					end
 
@@ -628,9 +644,9 @@ function run_file()
 
 end
 
+const INFO_ITER_STEP = 25 
 const INI_TIME = now()
-GC.enable_logging(true)
-@timev run_file()
+@time run_file()
 
 #@profile run_file()
 #open("CAMEOX_prof.txt", "w") do s
