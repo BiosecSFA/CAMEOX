@@ -104,7 +104,7 @@ function set_up_and_optimize(
 		population = load("trpE_population.jld")["population"][1:100] #[1:100]
 		mark_gremodel, deg_gremodel = std_setup.short_set_up(
 			mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm,
-			length(population), rand_barcode, frame)
+			length(population)) #, rand_barcode, frame)
 		deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
 	else
 		#Generate population of sampled hmm starting points.
