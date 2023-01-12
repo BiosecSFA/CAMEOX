@@ -110,15 +110,15 @@ function set_up_and_optimize(
 		#Generate population of sampled hmm starting points.
 		if X_range == false || Y_range == false #we require both to be there...
 			@debug("Doing standard full set up...")
-			mark_gremodel, deg_gremodel, population, mark_grem_prot,
-			deg_grem_prot = std_setup.full_set_up(
+			(mark_gremodel, deg_gremodel, population, mark_grem_prot,
+			deg_grem_prot, real_frame) = std_setup.full_set_up(
 				out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
 				deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
 		else
 			@debug("The x range is $X_range")
 			@debug("The y range is $Y_range")
-			mark_gremodel, deg_gremodel, population, mark_grem_prot,
-			deg_grem_prot = std_setup.full_sample_set_up(
+			(mark_gremodel, deg_gremodel, population, mark_grem_prot,
+			deg_grem_prot, real_frame) = std_setup.full_sample_set_up(
 				out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
 				deg_grem, pop_size, 1200, 1200, rand_barcode,
 				X_range, Y_range, frame)
@@ -474,7 +474,7 @@ function set_up_and_optimize(
 			out_file = open(metadata_filename, "a")                
 		end
 		println(out_file,
-		 rand_barcode, ',', mark_name, ',', deg_name, ',', pop_size, ',', frame, ',',
+		 rand_barcode, ',', mark_name, ',', deg_name, ',', pop_size, ',', real_frame, ',',
 		 rel_change_thr, ',', pll_weights, ',', mark_wt_apll, ',', deg_wt_apll, ',',
 		 rel_changed_seq, ',', iter, ',', max_iter, ',', sfv[1], ',', sfv[end], ',', 
 		 mean(fitness_values), ',', std(fitness_values), ',', unchanged_thr, ',',
@@ -534,7 +534,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.14 - Jan 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.15 - Jan 2022 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
