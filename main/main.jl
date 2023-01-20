@@ -66,14 +66,14 @@ Arguments:
 						set the range to be something like 150:151. Generally some buffer around this value (i.e. 150:160) is useful.
 						Don't set, or set to false if you don't care where the genes overlap.
 	actually_mrf: flag controlling whether doing MRF-based optimization
-	debug: debugging flag
+	debug: debugging argument
 """
 function set_up_and_optimize(
     log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
     mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, unchanged_thr, max_iter,
 	mut_num, mut_len;
 	host_tid = 562, pll_weights = "rand", gc_iter = 1,
-	X_range = false, Y_range = false, actually_mrf = true, debug = false,
+	X_range = false, Y_range = false, actually_mrf = true, debug = 0,
 	)
 
 	@debug("Beginning run.")
@@ -189,8 +189,18 @@ function set_up_and_optimize(
 				utils.aa_vec_to_seq(mark_prot_mat[i:i, 1:end]), mark_ull[i],
 				mark_pv_w1[i], mark_pv_w2[i:i, 1:end],
 				pll_weights == "rand" ? rand() : static_1st_weight,
-				0)
-			push!(cur_pop, new_chrom)
+				0) #So now everything is in an extended chromosome object.
+		push!(cur_pop, new_chrom)
+		end
+
+		if debug > 1  # Save population from HMM but before MRF optimization
+			outp = "$out_path/$(mark_name)_$(deg_name)_$frame/saved_HMM_$(rand_barcode).jld"
+			@debug("Let's save our HMM non-MRF-optimized population to ", outp, "...")
+			saved_pre = population_to_saveable(
+				cur_pop;
+				mark_wt_apll=mark_wt_apll, deg_wt_apll=deg_wt_apll)
+			FileIO.save(outp, "variants", saved_pre)
+			println("HMM non-MRF-optimized variants saved to ", outp)
 		end
 
 		#There are occasionally differences between HMM/MRF models of the proteins, mostly because HMMs are more flexible with insertions.
@@ -200,8 +210,8 @@ function set_up_and_optimize(
 
 		@debug("Hey the explicit mapping for mark_hmm_to_grem is $mark_hmm_to_grem_map")
 		@debug("Hey the explicit mapping for deg_hmm_to_grem is $deg_hmm_to_grem_map")
-		#So now everything is in an extended chromosome object.
 
+		# Set up some variables needed in the dynamic condition for the main CAMEOX loop
 		changed_seq = length(cur_pop)
 		rel_changed_seq = 1.0
 		iter = 0;
@@ -236,7 +246,7 @@ function set_up_and_optimize(
 			sfv = sort(fitness_values)
 			#best_50 = sfv[50]
 
-			if debug || iter % 25 == 0
+			if debug > 0 || iter % 25 == 0
 				println("INFO: Step $(iter): $(rel_changed_seq*100)% of changed seqs [threshold = $(rel_change_thr*100)%]")
 				flush(stdout)
 				@debug("Iteration $iter: $(rel_changed_seq*100)% ($changed_seq) of changed seqs [threshold = $(rel_change_thr*100)%]")
@@ -415,7 +425,7 @@ function set_up_and_optimize(
 		cal_both_p = sortperm(fitness_values)
 
 		@debug(Libc.strftime(time()))
-		if true #deg_significance && mark_significance
+		if FINALLY_SAVE_ALL_POPULATION || debug > 0  #deg_significance && mark_significance
 			@debug("Let's save our optimized population...")
 			saved_pop = population_to_saveable(
 				cur_pop;
@@ -519,8 +529,8 @@ function parse_commandline()
 			arg_type = Int
 			default = 1
 		"--debug", "-g"
-			help = "print debugging information"
-			action = :store_true
+			help = "activate debugging mode (use twice for further debugging output)"
+			action = :count_invocations
 		"--num"
 			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
 			default = "0"
@@ -534,7 +544,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.15 - Jan 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.16 - Jan 2022 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
@@ -549,7 +559,7 @@ function run_file()
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
 
-	if debug
+	if debug > 0
 		GC.enable_logging(true)
 		println("These CAMEOX command arguments are in effect:")
 		for key in keys(parsed_args)
@@ -633,7 +643,9 @@ function run_file()
 					write(problem_file,
                           "BC $rand_barcode ==> Problem $y processing line: $line\n")
                     flush(problem_file)
-					rethrow()  # TODO: Remove in stable release or move to debug mode
+					if debug > 0
+						rethrow()
+					end
 				end
 			end
 		end
@@ -644,10 +656,14 @@ function run_file()
 
 end
 
-const INFO_ITER_STEP = 25 
-const INI_TIME = now()
+const INFO_ITER_STEP = 25 # Iterations per info cycle (not debugging)
+const FINALLY_SAVE_ALL_POPULATION = true # Save all the population or just ~10 best variants
+const INI_TIME = now() # Initial time for elapsed time calculations
 @time run_file()
 
+#
+# Profiling 
+#
 #@profile run_file()
 #open("CAMEOX_prof.txt", "w") do s
 #    Profile.print(IOContext(s, :displaysize => (24, 500)))
