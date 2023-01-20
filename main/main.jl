@@ -194,7 +194,7 @@ function set_up_and_optimize(
 		end
 
 		if debug > 1  # Save population from HMM but before MRF optimization
-			outp = "$out_path/$(mark_name)_$(deg_name)_$frame/saved_HMM_$(rand_barcode).jld"
+			outp = "$out_path/$(mark_name)_$(deg_name)_$frame/saved_hmm_$(rand_barcode).jld"
 			@debug("Let's save our HMM non-MRF-optimized population to ", outp, "...")
 			saved_pre = population_to_saveable(
 				cur_pop;
