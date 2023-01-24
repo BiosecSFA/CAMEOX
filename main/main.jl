@@ -21,7 +21,7 @@ Aux: Get a JLD saveable population of variants
 """
 function population_to_saveable(cur_pop;
                                 deg_wt_apll::Float32=0.0,
-								 mark_wt_apll::Float32=0.0)
+								mark_wt_apll::Float32=0.0)
 	new_pop = types.SaveChrome[]
 
 	for indiv in cur_pop

@@ -42,7 +42,7 @@ function parse_commandline()
 end
 
 function outparse_cameos()
-    println("=-= CAMEOX output parser =-= v0.8 - Jan 2023 =-= by LLNL =-=")
+    println("=-= CAMEOX output parser =-= v0.9 - Jan 2023 =-= by LLNL =-=")
 
     # Parse arguments
    	parsed_args = parse_commandline()
@@ -103,13 +103,20 @@ function outparse_cameos()
                             mark_gene,"_psls,",
                             mark_gene,"_seq,",
                             deg_gene,"_psls,",
-                            deg_gene,"_seq"))
+                            deg_gene,"_seq,",
+                            mark_gene,"_weight,",
+                            deg_gene,"_weight"))
             for var in variants
                 println(io, var.full_sequence,",",
                         var.mark_prob,",",
                         var.mark_seq,",", #var.mark_nuc,",",
                         var.deg_prob,",",
-                        var.deg_seq) #,",",var.deg_nuc)
+                        var.deg_seq,",", #,",",var.deg_nuc
+                        # Calculate relative importance PLL weights like calculation of
+                        #   optimize.jl -> icm_multi_kt() -> final_options 
+                        2.0 * var.first_weight, ",", 
+                        2.0 * (1.0 - var.first_weight)
+                        )
                 parsed += 1
                 if parsed % 200 == 0
                     print(".")
