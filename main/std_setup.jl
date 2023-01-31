@@ -58,10 +58,10 @@ function CAMEOX_main(x, x_prot, y, y_prot, frame, myhost, extra_out = false)
 
 	real_frame::String = ""
 	if X_len <= Y_len
-		real_frame = "p1"
+		real_frame = "5'3'F3"
 		info("Processing entanglement $(x_prot)⥂$(y_prot) in frame $(real_frame)") # Other choices: ↚ ↸ ↹ ⇇ ⇍ ⇤ ⊃ ⊇ ⊢ ⊨ ⊫ ⋑ ⟽ ⤆ ⥄
 	else
-		real_frame = "p2"
+		real_frame = "5'3'F2"
 		info("Processing entanglement $(y_prot)⥂$(x_prot) in frame $(real_frame)")		
 	end
 	@debug("std_setup.jl::CAMEOX_main: $(x_prot)⥂$(y_prot) in $(real_frame) tensor built!")
