@@ -503,14 +503,14 @@ function parse_commandline()
 
 	@add_arg_table! s begin
 		"tasks"
-			help = "positional argument, path to TSV file with tasks (entanglements) to process"
+			help = "positional arg, path to TSV file with tasks (entanglements) to process"
 			default = "aroB_infA_pf5_uref100_debug.txt"
 		"--maxiter", "-m"
 			help = "hard limit to the number of iterations in the MRF-based optimization"
 			arg_type = Int
 			default = 5000
 		"--unchanged", "-u"
-			help = "hard limit to the number of iterations in the MRF-based optimization"
+			help = "min of contiguous iters without change to drop a seq from further opt"
 			arg_type = Int
 			default = 500			
 		"--nomrf"
@@ -544,7 +544,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.17 - Jan 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.18 - Jan 2022 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
