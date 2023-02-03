@@ -510,7 +510,7 @@ function parse_commandline()
 			arg_type = Int
 			default = 5000
 		"--unchanged", "-u"
-			help = "min of contiguous iters without change to drop a seq from further opt"
+			help = "contiguous iters without change to drop a seq from further optimization"
 			arg_type = Int
 			default = 500			
 		"--nomrf"
