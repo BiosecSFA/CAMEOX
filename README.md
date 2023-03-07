@@ -3,9 +3,7 @@ ___
 
 ## Overview
 
-This repository contains code and data related to CAMEOX, a parallelized extension of CAMEOS (Constraining Adaptive Mutations using Engineered Overlapping Sequences), currently under development by [LLNL (Lawrence Livermore National Laboratory)](https://www.llnl.gov/). For details on CAMEOS software developed by Tom Blazejewski at [Wang Lab](http://wanglab.c2b2.columbia.edu/), please consult:
- * [CAMEOS paper](https://www.science.org/doi/abs/10.1126/science.aav5477): Blazejewski, T., Ho, H. I., & Wang, H. H. (2019). Synthetic sequence entanglement augments stability and containment of genetic information in cells. _Science_, 365(6453), 595-598. 
- * [CAMEOS GitHub repository](https://github.com/wanglabcumc/CAMEOS).
+This repository contains code and data related to CAMEOX (CAMEOs eXtended), a parallelized extension of CAMEOS (Constraining Adaptive Mutations using Engineered Overlapping Sequences) developed by [LLNL (Lawrence Livermore National Laboratory)](https://www.llnl.gov/). The [original CAMEOS software](https://github.com/wanglabcumc/CAMEOS) was developed by Tom Blazejewski at [Wang Lab](http://wanglab.c2b2.columbia.edu/) (Columbia University). CAMEOX is the computational core of the [GENTANGLE pipeline](https://github.com/BiosecSFA/gentangle) for automated design of gene entanglements.
 
 ## Improvements
 
