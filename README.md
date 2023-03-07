@@ -46,6 +46,19 @@ Example with _Pseudomonas protegens_ Pf-5 (NCBI taxid: 220664) as host:
 ## Further documentation
 * The original [CAMEOS manual](https://github.com/wanglabcumc/CAMEOS/blob/master/doc/manual.pdf) is an essential document.
 * For related code, data, documentation, and notebooks specific to Livermore Computing (LC) you can take a look at [this repo](https://github.com/BiosecSFA/LLNL).
+
+## License
+
+CAMEOX is part of and released as part of the [GENTANGLE](https://github.com/BiosecSFA/gentangle) pipeline ([LLNL](https://www.llnl.gov/)-CODE-845475) and is distributed under the terms of the GNU Affero General Public License v3.0 (see LICENSE). CAMEOX is developed upon CAMEOS, which was released under a MIT license (see LICENSE-CAMEOS).
+
+SPDX-License-Identifier: AGPL-3.0-or-later
 ___
-CAMEOX is currently under development by [LLNL (Lawrence Livermore National Laboratory)](https://www.llnl.gov/).
+
+If you use CAMEOX in your research, please cite the following papers. Thanks!
+
+Allen JE, _et al._ **GENTANGLE: integrated computational design of gene entanglements**. _In preparation_. 2022. 
+
+
+Blazejewski T, Ho HI, Wang HH. **Synthetic sequence entanglement augments stability and containment of genetic information in cells**. _Science_. 2019 Aug 9;365(6453):595-8. https://doi.org/10.1126/science.aav5477
+
 ___
