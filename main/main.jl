@@ -47,6 +47,9 @@ Code also logs information through Logging package.
 Genes are often referred to as mark/deg. This is historic from times of thinking of "marker" genes and "designated essential gene".
 At this point this distinction is not meaningful but is kept to avoid equally arbitrary x_name, y_name conventions.
 Arguments:
+	log_io: IO object for logging 
+	rand_barcode: barcode for this entanglement pair
+	paths: Paths object with relevant paths
 	mark_name : gene ID for 'mark' gene. Needed as a key for looking up some values associated with genes in text files.
 	deg_name : gene ID for 'deg' gene.
 	mark/deg_grem : path to MRF parameter files, usually a JLD/CSV file.
@@ -69,7 +72,7 @@ Arguments:
 	debug: debugging argument
 """
 function set_up_and_optimize(
-    log_io, rand_barcode, out_path, mark_name, deg_name, mark_grem, deg_grem,
+    log_io, rand_barcode, paths::types.Paths, mark_name, deg_name, mark_grem, deg_grem,
     mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, unchanged_thr, max_iter,
 	mut_num, mut_len;
 	host_tid = 562, pll_weights = "rand", gc_iter = 1,
@@ -91,8 +94,8 @@ function set_up_and_optimize(
 	last_few_cs = Float64[]
 
 	#Looks up mean/std. dev of family pseudolikelihoods, pre-computed.
-	mu_mark, sig_mark = lookup.mu_sig(deg_name, "psls/")
-	mu_deg, sig_deg = lookup.mu_sig(mark_name, "psls/")
+	mu_mark, sig_mark = lookup.mu_sig(deg_name, normpath(paths.input, "psls/"))
+	mu_deg, sig_deg = lookup.mu_sig(mark_name, normpath(paths.input, "psls/"))
 
 	@debug("Stat param vars (mark / deg):\t$(mu_mark)\t$(sig_mark)\t$(mu_deg)\t$(sig_deg)")
 
@@ -112,14 +115,14 @@ function set_up_and_optimize(
 			@debug("Doing standard full set up...")
 			(mark_gremodel, deg_gremodel, population, mark_grem_prot,
 			deg_grem_prot, real_frame) = std_setup.full_set_up(
-				out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
+				paths.output, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
 				deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
 		else
 			@debug("The x range is $X_range")
 			@debug("The y range is $Y_range")
 			(mark_gremodel, deg_gremodel, population, mark_grem_prot,
 			deg_grem_prot, real_frame) = std_setup.full_sample_set_up(
-				out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
+				paths.output, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
 				deg_grem, pop_size, 1200, 1200, rand_barcode,
 				X_range, Y_range, frame)
 		end
@@ -128,7 +131,7 @@ function set_up_and_optimize(
 
 	# Get (anti)pseudolikelihood for WT sequences
 	function get_apll_wt()
-		prot_seqs = bio_seq.load_fasta("proteins.fasta")
+		prot_seqs = bio_seq.load_fasta(joinpath(paths.input, "proteins.fasta"))
 		local deg_seq, mark_seq
 		# For mark
 		mark_seq = prot_seqs[mark_name]
@@ -194,7 +197,7 @@ function set_up_and_optimize(
 		end
 
 		if debug > 1  # Save population from HMM but before MRF optimization
-			outp = "$out_path/$(mark_name)_$(deg_name)_$frame/saved_hmm_$(rand_barcode).jld"
+			outp = joinpath(paths.entangle, "saved_hmm_$(rand_barcode).jld")
 			@debug("Let's save our HMM non-MRF-optimized population to ", outp, "...")
 			saved_pre = population_to_saveable(
 				cur_pop;
@@ -362,7 +365,7 @@ function set_up_and_optimize(
 		# History matrix
 		@debug("Let us save the history matrix!")
 		FileIO.save(
-			"$out_path/$(mark_name)_$(deg_name)_$frame/opt_his_mat_$(rand_barcode).jld",
+			joinpath(paths.entangle, "opt_his_mat_$(rand_barcode).jld"),
 			"hist_mat", history_matrix)
 
 		deg_significance = false
@@ -370,7 +373,8 @@ function set_up_and_optimize(
 		all_cal_deg_scores = Float64[]
 		all_cal_mark_scores = Float64[]
 		#If no we save just a few (top 10) individuals. These are top-6 overall + top-2 in deg and top-2 in mark.
-		out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/all_final_fitness_$(rand_barcode).txt", "w")
+		out_file = open(
+			joinpath(paths.entangle, "all_final_fitness_$(rand_barcode).txt"), "w")
 		write(out_file, "Ind. #\tMark Score\tDeg Score\tMark Sign\tDeg Sign\n")
 		for last_indi in eachindex(cur_pop)
 			rep_deg = cur_pop[last_indi].deg_prob
@@ -431,7 +435,7 @@ function set_up_and_optimize(
 				cur_pop;
 				mark_wt_apll=mark_wt_apll, deg_wt_apll=deg_wt_apll)
 			FileIO.save(
-				"$out_path/$(mark_name)_$(deg_name)_$frame/saved_pop_$(rand_barcode).jld",
+				joinpath(paths.entangle, "saved_pop_$(rand_barcode).jld"), 
 				"variants", saved_pop)
 		else #We want just a subset.
 			@debug("We'll save 12 interesting members of the population...")
@@ -444,12 +448,12 @@ function set_up_and_optimize(
 				push!(selected_pop, cur_pop[cal_both_p[ijk]])
 			end
 			FileIO.save(
-				"$out_path/$(mark_name)_$(deg_name)_$frame/top_pop_$(rand_barcode).jld",
+				joinpath(paths.entangle, "top_pop_$(rand_barcode).jld"),
 				"variants", selected_pop)
 		end
 
 		@debug("And we'll also output our top twelve sequences...")
-		out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/top_twelve_$(rand_barcode).fa", "w")
+		out_file = open(joinpath(paths.entangle, "top_twelve_$(rand_barcode).fa"), "w")
 
 		for ijk in 1:3
 			deg_ind = cal_deg_p[ijk]
@@ -475,7 +479,7 @@ function set_up_and_optimize(
 		close(out_file)
 
 		@debug("Finally, we'll save some metadata of the run...")
-		metadata_filename = "$out_path/$(mark_name)_$(deg_name)_$frame/CAMEOX_metadata.csv" 
+		metadata_filename = joinpath(paths.entangle, "CAMEOX_metadata.csv") 
 		if !isfile(metadata_filename)
 			out_file = open(metadata_filename, "w")  
 			write(out_file,
@@ -528,8 +532,12 @@ function parse_commandline()
 			help = "number of MRF-based optimization iterations per GC event (0 disables)"
 			arg_type = Int
 			default = 1
+		"--basedir", "-b"
+			help = "base directory for data (defaults to CAMEOS behaviour of code dir)"
+			arg_type = AbstractString
+			default = "."		
 		"--debug", "-g"
-			help = "activate debugging mode (use twice for further debugging output)"
+			help = "activate debugging mode (repeat for further debugging output)"
 			action = :count_invocations
 		"--num"
 			help = "[CAMEOS legacy] experimentally used for running multiple jobs at once"
@@ -544,7 +552,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.18 - Jan 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.20 - Jul 2022 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
@@ -558,12 +566,15 @@ function run_file()
 	debug = parsed_args["debug"]
 	num = parsed_args["num"]
 	threads = parsed_args["threads"]
+	basedir = parsed_args["basedir"]
 
 	if debug > 0
-		GC.enable_logging(true)
 		println("These CAMEOX command arguments are in effect:")
 		for key in keys(parsed_args)
 			println("  > '", key, "' is ", parsed_args[key])
+		end
+		if debug > 2
+			GC.enable_logging(true)
 		end
 	end
 
@@ -584,7 +595,7 @@ function run_file()
 		close(in_file)
 
 		#This is an additional file that records errors independent of individual log files.
-		problem_file = open("problem_runs_$(RUN_I).txt", "a")
+		problem_file = open(joinpath(basedir, "problem_runs_$(RUN_I).txt"), "a")
 
 		line_count = 0
 		for line in in_read #
@@ -609,14 +620,18 @@ function run_file()
                             "this PLL optimization choice is unknown!"))
                     end
                     
-					the_out_path = "$out_dir/$(short)_$(long)_$frame/"
-					if !(isdir(the_out_path))
-						run(`mkdir -p $the_out_path`)
+					out_path = joinpath(basedir, out_dir)
+					entangle_path = joinpath(out_path, "$(short)_$(long)_$frame")
+					if !(isdir(entangle_path))
+						run(`mkdir -p $entangle_path`)
 					end
+					debug > 0 && println("DEBUG: Entangle output path is $entangle_path")
+					# Define important paths in a Path object
+					paths = types.Paths(basedir, basedir, out_path, entangle_path)				
 
-					log_io = open(
-                        "$out_dir/$(short)_$(long)_$frame/log_$(rand_barcode).txt",
-                        "w+")
+					log_path = joinpath(entangle_path, "log_$(rand_barcode).txt")
+					log_io = open(log_path, "w+")
+					debug > 0 && println("DEBUG: Full log stored on $log_path")
 
 					logger = SimpleLogger(log_io, Logging.Debug)
 					global_logger(logger)
@@ -624,7 +639,7 @@ function run_file()
 					with_logger(logger) do
 						pop_size = parse(Int64, pop_size)
 						rel_change_thr = parse(Float64, rel_change_thr)
-						set_up_and_optimize(log_io, rand_barcode, out_dir,
+						set_up_and_optimize(log_io, rand_barcode, paths,
                                             short, long,
                                             short_jld, long_jld,
                                             short_hmm, long_hmm,
