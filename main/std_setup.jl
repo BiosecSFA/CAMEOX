@@ -485,7 +485,7 @@ function hmm_score_helper(deg_in_read)
 end
 
 function full_set_up(
-    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem,
+    paths, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem,
     pop_size, num_samples, bad_threshold, rand_barcode, frame="p1",
     host_tid=562)
 
@@ -493,8 +493,8 @@ function full_set_up(
     
 	my_prots, real_frame = NST_full_general_main(
         mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost, pop_size * 50,
-        0.90, 1.0, 1.0, 1200, gen_hmm_trace(mark_name, mark_hmm, myhost)...,
-        gen_hmm_trace(deg_name, deg_hmm, myhost)...)
+        0.90, 1.0, 1.0, 1200, gen_hmm_trace(mark_name, mark_hmm, myhost, paths)...,
+        gen_hmm_trace(deg_name, deg_hmm, myhost, paths)...)
 
 	info("Evaluating $(length(my_prots)) HMM seeds (full genes)...")
 	@debug("std_setup:full_set_up(): We've generated samples.")
@@ -524,38 +524,40 @@ function full_set_up(
 		end
 	end
 
-	deg_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/deg_out_$(rand_barcode).fa", "w")
+	deg_out_file = open(joinpath(paths.entangle, "deg_out_$(rand_barcode).fa"), "w")
 	write(deg_out_file, "$(join(deg_lines))")
 	close(deg_out_file)
 
-	mark_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/mark_out_$(rand_barcode).fa", "w")
+	mark_out_file = open(joinpath(paths.entangle, "mark_out_$(rand_barcode).fa"), "w")
 	write(mark_out_file, "$(join(mark_lines))")
 	close(mark_out_file)
 
     @sync begin
-        @async deg_hmm_run = read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl $deg_hmm $out_path/$(mark_name)_$(deg_name)_$frame/deg_out_$(rand_barcode).fa `), String)
-	    @async mark_hmm_run= read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/mark_$(rand_barcode).tbl $mark_hmm $out_path/$(mark_name)_$(deg_name)_$frame/mark_out_$(rand_barcode).fa `), String)
+        @async deg_hmm_run = read(pipeline(`hmmscan --cpu 1 --tblout=$(paths.entangle)/deg_$(rand_barcode).tbl $deg_hmm $(paths.entangle)/deg_out_$(rand_barcode).fa `), String)
+	    @async mark_hmm_run= read(pipeline(`hmmscan --cpu 1 --tblout=$(paths.entangle)/mark_$(rand_barcode).tbl $mark_hmm $(paths.entangle)/mark_out_$(rand_barcode).fa `), String)
     end
 
 	#Okay now read the results and see which samples are top quality.
-	deg_in_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl")
+	deg_in_file = open(joinpath(paths.entangle, "deg_$(rand_barcode).tbl"))
 	deg_in_read = readlines(deg_in_file)
 	close(deg_in_file)
 	deg_hmm_scores = hmm_score_helper(deg_in_read)
 
-	mark_in_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/mark_$(rand_barcode).tbl")
+	mark_in_file = open(joinpath(paths.entangle, "mark_$(rand_barcode).tbl"))
 	mark_in_read = readlines(mark_in_file)
 	close(mark_in_file)
 	mark_hmm_scores = hmm_score_helper(mark_in_read)
 
-	#Okay, now we just sum up the contributions of each score in deg/mark for total.
+	#Okay, now we sum up the contributions of each score (rand weight) in deg/mark for total.
 	#We will then choose the top-N scoring samples for further work.
 
 	total_sam = Dict{Int64, Float64}()
 	for sam in titles
 		sam_key = "sample_$sam"
 		if sam_key in keys(mark_hmm_scores) && sam_key in keys(deg_hmm_scores)
-			total_score = mark_hmm_scores[sam_key] + deg_hmm_scores[sam_key]
+			first_weight = 0.5 # Now is equal as in legacy, but may be rand()
+			total_score = (first_weight * mark_hmm_scores[sam_key] 
+				+ (1 - first_weight) * deg_hmm_scores[sam_key])
 			total_sam[sam] = total_score
 		end
 	end
@@ -594,16 +596,17 @@ function full_set_up(
 		push!(mark_lines, ">sample_$(iiiii) ($(total_sam[iiiii]))\n$(mark_sub_prots[iiiii])\n")
 	end
 
-	deg_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/deg_select_$(rand_barcode).fa", "w")
+	deg_out_file = open(joinpath(paths.entangle, "deg_select_$(rand_barcode).fa"), "w")
 	write(deg_out_file, "$(join(deg_lines))")
 	close(deg_out_file)
 
-	mark_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/mark_select_$(rand_barcode).fa", "w")
+	mark_out_file = open(joinpath(paths.entangle, "mark_select_$(rand_barcode).fa"), "w")
 	write(mark_out_file, "$(join(mark_lines))")
 	close(mark_out_file)
 
 	@debug("From new_sample_traceback, we get $(length(my_top_prots)) samples with which to work.")
-	my_ex_prots, mark_grem_prot, deg_grem_prot = try_run_on_SampleNucs(my_top_prots, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem)
+	my_ex_prots, mark_grem_prot, deg_grem_prot = try_run_on_SampleNucs(
+		my_top_prots, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem)
 	@debug("We set up with $(length(my_ex_prots)) proteins from auto_align_grem.")
 
 	mark_grem_model = mrf.init_model(mark_grem)
@@ -622,14 +625,22 @@ function full_set_up(
 		end
 		#try
 
-		deg_nuc, deg_map, mark_nuc, mark_map = interpret_censorship(ex.final_seq, ex.deg_skip, ex.deg_insert, (ex.deg_trns, ex.deg_trne, ex.deg_d), ex.mark_skip, ex.mark_insert, (ex.mark_trns, ex.mark_trne, ex.mark_d))
-		deg_trans = uppercase(bio_seq.translate_constrained_maybe_map(deg_nuc, ex.deg_trns, do_map = false))
-		mark_trans = uppercase(bio_seq.translate_constrained_maybe_map(mark_nuc, ex.mark_trns, do_map = false))
+		deg_nuc, deg_map, mark_nuc, mark_map = interpret_censorship(
+			ex.final_seq, ex.deg_skip, ex.deg_insert,
+			 (ex.deg_trns, ex.deg_trne, ex.deg_d), ex.mark_skip, ex.mark_insert,
+			  (ex.mark_trns, ex.mark_trne, ex.mark_d))
+		deg_trans = uppercase(bio_seq.translate_constrained_maybe_map(
+			deg_nuc, ex.deg_trns, do_map = false))
+		mark_trans = uppercase(bio_seq.translate_constrained_maybe_map(
+			mark_nuc, ex.mark_trns, do_map = false))
 
-		if length(strip(deg_trans, '*')) == deg_grem_model.nNodes && length(strip(mark_trans, '*')) == mark_grem_model.nNodes
+		if (length(strip(deg_trans, '*')) == deg_grem_model.nNodes &&
+			 length(strip(mark_trans, '*')) == mark_grem_model.nNodes)
 			push!(deg_prot_seqs, deg_trans)
 			push!(mark_prot_seqs, mark_trans)
-			push!(iss, (ex.path, ex.final_seq, deg_nuc, deg_map, ex.deg_trns, ex.deg_trne, ex.deg_d, ex.deg_skip, ex.deg_insert, mark_nuc, mark_map, ex.mark_trns, ex.mark_trne, ex.mark_d, ex.mark_skip, ex.mark_insert))
+			push!(iss, (ex.path, ex.final_seq, deg_nuc, deg_map, ex.deg_trns, ex.deg_trne,
+			 ex.deg_d, ex.deg_skip, ex.deg_insert, mark_nuc, mark_map, ex.mark_trns,
+			  ex.mark_trne, ex.mark_d, ex.mark_skip, ex.mark_insert))
 			#I just want to write all these proteins and assess their likelihoods and stuff as a big batch.
 			successes += 1
 		end
@@ -644,8 +655,10 @@ function full_set_up(
 		mark_prot_mat[i, 1:end] = bio_seq.convert_protein(mark_prot_seqs[i][1:mark_grem_model.nNodes])
 	end
 
-	deg_probs, deg_ull, deg_pv_w1, deg_pv_w2 = mrf.cpu_assess(deg_prot_mat, deg_grem_model.w1, deg_grem_model.w2, deg_grem_model.nNodes, successes)
-	mark_probs, mark_ull, mark_pv_w1, mark_pv_w2 = mrf.cpu_assess(mark_prot_mat, mark_grem_model.w1, mark_grem_model.w2, mark_grem_model.nNodes, successes)
+	deg_probs, deg_ull, deg_pv_w1, deg_pv_w2 = mrf.cpu_assess(
+		deg_prot_mat, deg_grem_model.w1, deg_grem_model.w2, deg_grem_model.nNodes, successes)
+	mark_probs, mark_ull, mark_pv_w1, mark_pv_w2 = mrf.cpu_assess(
+		mark_prot_mat, mark_grem_model.w1, mark_grem_model.w2, mark_grem_model.nNodes, successes)
 
 	for i in 1:successes
 		new_chr = types.Chromosome(iss[i]..., deg_probs[i], mark_probs[i])

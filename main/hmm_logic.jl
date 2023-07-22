@@ -405,9 +405,9 @@ end
 #Basically we also find it useful to trace the protein sequence to the hmm.
 #We want wild-type sequence for non-overlapping regions, and we want to align it to hmm because hmm is sort of our "base positioning"
 #of the models we're constructing.
-function gen_hmm_trace(gene_name, gene_hmm, myhost)
-	cds_seqs = bio_seq.load_fasta("cds.fasta")
-	prot_seqs = bio_seq.load_fasta("proteins.fasta")
+function gen_hmm_trace(gene_name, gene_hmm, myhost, paths)
+	cds_seqs = bio_seq.load_fasta(joinpath(paths.input, "cds.fasta"))
+	prot_seqs = bio_seq.load_fasta(joinpath(paths.input, "proteins.fasta"))
 
 	local cds_seq, prot_seq
     try
@@ -456,7 +456,7 @@ function gen_hmm_trace(gene_name, gene_hmm, myhost)
 				cds_count += 1
 			elseif aa_count in keys(to_add)
 				push!(final_aas, to_add[aa_count])
-				push!(final_codons, host.optimize_codons(host, to_add[aa_count]))
+				push!(final_codons, host.optimize_codons(myhost, to_add[aa_count]))
 				#we don't iterate on cds_count because we haven't added natural codons.
 			end
 		end

@@ -72,7 +72,7 @@ Arguments:
 	debug: debugging argument
 """
 function set_up_and_optimize(
-    log_io, rand_barcode, paths::types.Paths, mark_name, deg_name, mark_grem, deg_grem,
+    log_io, rand_barcode, paths, mark_name, deg_name, mark_grem, deg_grem,
     mark_hmm, deg_hmm, pop_size, frame, rel_change_thr, unchanged_thr, max_iter,
 	mut_num, mut_len;
 	host_tid = 562, pll_weights = "rand", gc_iter = 1,
@@ -115,7 +115,7 @@ function set_up_and_optimize(
 			@debug("Doing standard full set up...")
 			(mark_gremodel, deg_gremodel, population, mark_grem_prot,
 			deg_grem_prot, real_frame) = std_setup.full_set_up(
-				paths.output, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
+				paths, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
 				deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
 		else
 			@debug("The x range is $X_range")
