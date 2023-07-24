@@ -100,14 +100,12 @@ function set_up_and_optimize(
 	@debug("Stat param vars (mark / deg):\t$(mu_mark)\t$(sig_mark)\t$(mu_deg)\t$(sig_deg)")
 
 	# TODO: Expose gen_samples and candidate JLD file as input arguments
-	gen_samples = true #this is true if starting from scratch (general case), false if we have some candidates to optimize ahead of time.
+	gen_samples = true #this is true if starting from scratch (general case), false if we have some candidates to optimize ahead of time (untested CAMEOS legacy).
 	population = types.Chromosome[]
 	local mark_grem_prot, deg_grem_prot
 	if !gen_samples
-		population = load("trpE_population.jld")["population"][1:100] #[1:100]
-		mark_gremodel, deg_gremodel = std_setup.short_set_up(
-			mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm,
-			length(population)) #, rand_barcode, frame)
+		population = load(joinpath(paths.input, "trpE_population.jld"))["population"][1:100]
+		mark_gremodel, deg_gremodel = std_setup.short_set_up(mark_grem, deg_grem)
 		deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
 	else
 		#Generate population of sampled hmm starting points.
@@ -116,15 +114,15 @@ function set_up_and_optimize(
 			(mark_gremodel, deg_gremodel, population, mark_grem_prot,
 			deg_grem_prot, real_frame) = std_setup.full_set_up(
 				paths, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
-				deg_grem, pop_size, 1200, 1200, rand_barcode, frame, host_tid)
+				deg_grem, pop_size, rand_barcode, frame, host_tid)
 		else
 			@debug("The x range is $X_range")
 			@debug("The y range is $Y_range")
 			(mark_gremodel, deg_gremodel, population, mark_grem_prot,
-			deg_grem_prot, real_frame) = std_setup.full_sample_set_up(
+			deg_grem_prot, real_frame) = std_setup.full_set_up(
 				paths.output, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm,
-				deg_grem, pop_size, 1200, 1200, rand_barcode,
-				X_range, Y_range, frame)
+				deg_grem, pop_size, rand_barcode, frame, host_tid;
+				X_range, Y_range)
 		end
 		deg_nNodes, mark_nNodes = deg_gremodel.nNodes, mark_gremodel.nNodes
 	end

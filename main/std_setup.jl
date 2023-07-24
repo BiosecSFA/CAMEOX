@@ -487,16 +487,26 @@ end
 function full_set_up(
     paths, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem,
     pop_size, num_samples, bad_threshold, rand_barcode, frame="p1",
-    host_tid=562)
+    host_tid=562; mark_range=nothing, deg_range=nothing, hmm_oversampling_rate=50)
 
     myhost = host.Host{Int64}(host_tid)
     
-	my_prots, real_frame = NST_full_general_main(
-        mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost, pop_size * 50,
-        0.90, 1.0, 1.0, 1200, gen_hmm_trace(mark_name, mark_hmm, myhost, paths)...,
-        gen_hmm_trace(deg_name, deg_hmm, myhost, paths)...)
-
-	info("Evaluating $(length(my_prots)) HMM seeds (full genes)...")
+	if mark_range === nothing && deg_range === nothing
+		my_prots, real_frame = NST_full_general_main(
+			mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost,
+			pop_size * hmm_oversampling_rate, 0.90, 1.0, 1.0, 1200,
+			gen_hmm_trace(mark_name, mark_hmm, myhost, paths)...,
+			gen_hmm_trace(deg_name, deg_hmm, myhost, paths)...)
+		info("Evaluating $(length(my_prots)) HMM seeds (full genes)...")
+	else
+		my_sampled_prots, real_frame = NST_full_general_main_range(
+			mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost,
+			pop_size * hmm_oversampling_rate, 0.90, 1.0, 1.0, 1200,
+			mark_range, deg_range,
+			gen_hmm_trace(mark_name, mark_hmm, myhost, paths)...,
+			gen_hmm_trace(deg_name, deg_hmm, myhost, paths)...)
+		info("Evaluating $(length(my_prots)) HMM seeds (ranges apply)...")
+	end	
 	@debug("std_setup:full_set_up(): We've generated samples.")
 
 	sample_count = 1
@@ -668,185 +678,11 @@ function full_set_up(
 		mark_grem_prot, deg_grem_prot, real_frame)
 end
 
-function full_sample_set_up(
-    out_path, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem,
-    pop_size, num_samples, bad_threshold, rand_barcode, mark_range, deg_range,
-    frame="p1", host_tid=562)
-
-    myhost = host.Host{Int64}(host_tid)
-    
-	my_sampled_prots, real_frame = NST_full_general_main_range(
-        mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost, pop_size * 50,
-        0.90, 1.0, 1.0, 1200, mark_range, deg_range,
-        gen_hmm_trace(mark_name, mark_hmm, myhost)...,
-        gen_hmm_trace(deg_name, deg_hmm, myhost)...)
-
-	info("Evaluating $(length(my_prots)) HMM seeds (ranges apply)...")
-	@debug("std_setup:full_sample_set_up(): We've generated samples.")
-
-	sample_count = 1
-	mark_sub_prots = Dict{String, String}()
-	deg_sub_prots = Dict{String, String}()
-	keep_track = Dict{String, Any}()
-	titles = String[]
-	for sample_nuc in my_sampled_prots
-		sample_name = "$sample_count"
-		deg_prot_trans = bio_seq.translate(sample_nuc.final_seq[sample_nuc.deg_trns: sample_nuc.deg_trne], 1)
-		mark_prot_trans = bio_seq.translate(sample_nuc.final_seq[sample_nuc.mark_trns: sample_nuc.mark_trne], 1)
-		mark_sub_prots[sample_name] = mark_prot_trans
-		deg_sub_prots[sample_name] = deg_prot_trans
-		keep_track[sample_name] = sample_nuc
-		push!(titles, sample_name)
-		sample_count += 1
-	end
-
-	deg_lines = String[]
-	mark_lines = String[]
-	for sam in titles
-		if length(strip(deg_sub_prots[sam])) > 1 && length(strip(mark_sub_prots[sam])) > 1 #hmmscan doesn't like empty lines.
-			push!(deg_lines, ">sample_$(sam)\n$(deg_sub_prots[sam])\n")
-			push!(mark_lines, ">sample_$(sam)\n$(mark_sub_prots[sam])\n")
-		end
-	end
-
-	deg_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/deg_out_$(rand_barcode).fa", "w")
-	write(deg_out_file, "$(join(deg_lines))")
-	close(deg_out_file)
-
-	mark_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/mark_out_$(rand_barcode).fa", "w")
-	write(mark_out_file, "$(join(mark_lines))")
-	close(mark_out_file)
-
-	deg_hmm_run = read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl $deg_hmm $out_path/$(mark_name)_$(deg_name)_$frame/deg_out_$(rand_barcode).fa `), String)
-	mark_hmm_run= read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/mark_$(rand_barcode).tbl $mark_hmm $out_path/$(mark_name)_$(deg_name)_$frame/mark_out_$(rand_barcode).fa `), String)
-
-    @sync begin
-        @async deg_hmm_run = read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl $deg_hmm $out_path/$(mark_name)_$(deg_name)_$frame/deg_out_$(rand_barcode).fa `), String)
-	    @async mark_hmm_run= read(pipeline(`hmmscan --cpu 1 --tblout=$out_path/$(mark_name)_$(deg_name)_$frame/mark_$(rand_barcode).tbl $mark_hmm $out_path/$(mark_name)_$(deg_name)_$frame/mark_out_$(rand_barcode).fa `), String)
-    end
-
-	#Okay now read the results and see which samples are top quality.
-	deg_in_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/deg_$(rand_barcode).tbl")
-	deg_in_read = readlines(deg_in_file)
-	close(deg_in_file)
-	deg_hmm_scores = hmm_score_helper(deg_in_read)
-
-	mark_in_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/mark_$(rand_barcode).tbl")
-	mark_in_read = readlines(mark_in_file)
-	close(mark_in_file)
-	mark_hmm_scores = hmm_score_helper(mark_in_read)
-
-	total_sam = Dict{String, Float64}()
-	for sam in titles
-		sam_key = "sample_$sam"
-		if sam_key in keys(mark_hmm_scores) && sam_key in keys(deg_hmm_scores)
-			total_score = mark_hmm_scores[sam_key] + deg_hmm_scores[sam_key]
-			total_sam[sam] = total_score
-		end
-	end
-
-	total_sam_num = length(collect(keys(total_sam)))
-
-	safety_margin = round(Int64, pop_size * 1.1) #10% more than pop_size in case of random failures.
-	#Okay, well now let's sort the dictionary and only keep some of the prots!
-	sorted_by_score = sort(collect(total_sam), by= x -> -x[2]) #negative so that top is first.
-
-	num_from_elite = 5
-
-	num_from_general_sample = safety_margin
-	num_from_range_sample = 0
-
-	top_third = sorted_by_score[1:div(total_sam_num, 3)]
-	top_key_pairs = sample(top_third, num_from_general_sample, replace=false) #clearly safety_margin can never be bigger than top_half/top_quart.
-	top_candidates = [top_key_pairs[i][1] for i in 1:num_from_general_sample]
-
-	elite_candidates = [sorted_by_score[i][1] for i in 1:num_from_elite]
-
-	for elite in elite_candidates
-		push!(top_candidates, elite)
-	end
-
-	top_candidates = reverse(top_candidates) #to get elites in first.
-
-	my_top_prots = types.SampleNucs[]
-	for topper in top_candidates
-		push!(my_top_prots, keep_track[topper]) #should be an int.
-	end
-
-	deg_lines = String[]
-	mark_lines = String[]
-
-	#Let's output the top samples just to be able to query its diversity.
-	for iiiii in top_candidates
-		push!(deg_lines, ">sample_$(iiiii) ($(total_sam[iiiii]))\n$(deg_sub_prots[iiiii])\n")
-		push!(mark_lines, ">sample_$(iiiii) ($(total_sam[iiiii]))\n$(mark_sub_prots[iiiii])\n")
-	end
-
-	deg_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/deg_select_$(rand_barcode).fa", "w")
-	write(deg_out_file, "$(join(deg_lines))")
-	close(deg_out_file)
-
-	mark_out_file = open("$out_path/$(mark_name)_$(deg_name)_$frame/mark_select_$(rand_barcode).fa", "w")
-	write(mark_out_file, "$(join(mark_lines))")
-	close(mark_out_file)
-
-	@debug("From new_sample_traceback, we get $(length(my_top_prots)) samples with which to work.")
-	my_ex_prots, mark_grem_prot, deg_grem_prot = try_run_on_SampleNucs(my_top_prots, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem)
-	@debug("We set up with $(length(my_ex_prots)) proteins from auto_align_grem.")
-
-	mark_grem_model = mrf.init_model(mark_grem)
-	deg_grem_model = mrf.init_model(deg_grem) #MAKE SURE THIS IS FLOAT32.
-
-	chromosomes = types.Chromosome[]
-
-	iss = Any[]
-	deg_prot_seqs = String[]
-	mark_prot_seqs = String[]
-
-	successes = 0
-	for ex in my_ex_prots
-		if successes >= pop_size #this may happen if our sampling from CAMEOS is out of step with our desired population size.
-			break
-		end
-		deg_nuc, deg_map, mark_nuc, mark_map = interpret_censorship(ex.final_seq, ex.deg_skip, ex.deg_insert, (ex.deg_trns, ex.deg_trne, ex.deg_d), ex.mark_skip, ex.mark_insert, (ex.mark_trns, ex.mark_trne, ex.mark_d))
-		deg_trans = uppercase(bio_seq.translate_constrained_maybe_map(deg_nuc, ex.deg_trns, do_map = false))
-		mark_trans = uppercase(bio_seq.translate_constrained_maybe_map(mark_nuc, ex.mark_trns, do_map = false))
-
-		if length(strip(deg_trans, '*')) == deg_grem_model.nNodes && length(strip(mark_trans, '*')) == mark_grem_model.nNodes
-			push!(deg_prot_seqs, deg_trans)
-			push!(mark_prot_seqs, mark_trans)
-			push!(iss, (ex.path, ex.final_seq, deg_nuc, deg_map, ex.deg_trns, ex.deg_trne, ex.deg_d, ex.deg_skip, ex.deg_insert, mark_nuc, mark_map, ex.mark_trns, ex.mark_trne, ex.mark_d, ex.mark_skip, ex.mark_insert))
-			#I just want to write all these proteins and assess their likelihoods and stuff as a big batch.
-			successes += 1
-		end
-	end
-
-	@debug("We had $successes sampling successes...")
-
-	deg_prot_mat = zeros(Int64, successes, deg_grem_model.nNodes * 21)
-	mark_prot_mat = zeros(Int64, successes, mark_grem_model.nNodes * 21)
-	for i in 1:successes
-		deg_prot_mat[i, 1:end] = bio_seq.convert_protein(deg_prot_seqs[i][1:deg_grem_model.nNodes])
-		mark_prot_mat[i, 1:end] = bio_seq.convert_protein(mark_prot_seqs[i][1:mark_grem_model.nNodes])
-	end
-
-	deg_probs, deg_ull, deg_pv_w1, deg_pv_w2 = mrf.cpu_assess(deg_prot_mat, deg_grem_model.w1, deg_grem_model.w2, deg_grem_model.nNodes, successes)
-	mark_probs, mark_ull, mark_pv_w1, mark_pv_w2 = mrf.cpu_assess(mark_prot_mat, mark_grem_model.w1, mark_grem_model.w2, mark_grem_model.nNodes, successes)
-
-	for i in 1:successes
-		#I can just splat the tuple with "..."
-		new_chr = types.Chromosome(iss[i]..., deg_probs[i], mark_probs[i])
-		push!(chromosomes, new_chr)
-	end
-	return (mark_grem_model, deg_grem_model, chromosomes, 
-		mark_grem_prot, deg_grem_prot, real_frame)
-end
-
-function short_set_up(mark_name, deg_name, mark_grem, deg_grem, mark_hmm, deg_hmm, pop_size)
+function short_set_up(mark_grem, deg_grem)
 	mark_grem_model = mrf.init_model(mark_grem)
 	deg_grem_model = mrf.init_model(deg_grem)
 
-	seqs = bio_seq.load_fasta("gremlin_consensus.fa")
+	#seqs = bio_seq.load_fasta(joinpath(paths.input, "gremlin_consensus.fa"))
 	return mark_grem_model, deg_grem_model
 end
 
