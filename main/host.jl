@@ -39,7 +39,7 @@ struct Host{T<:Integer}
     name::String
     opt_codon::Dict{Char, String}
 
-    function Host{T}(tid::T) where {T<:Integer}
+    function Host{T}(tid::T, path::String=".") where {T<:Integer}
         # Select supported host
         name::String = ""
         if tid == 562
@@ -53,11 +53,11 @@ struct Host{T<:Integer}
 
         # Parse CUT from file to get the aa => codon optimization dictionary 
         aa2opt_codon = Dict{Char, String}()
-        filenamecut::String = "CUT_$(tid).tsv"
+        filenamecut::String = joinpath(path, "CUT_$(tid).tsv")
         if !isfile(filenamecut)
             error("Missing Codon Usage Table file $filenamecut for taxid $(tid)!")
         end
-        global cut = CSV.read("CUT_$(tid).tsv", DataFrame)  # CUT = Codon Usage Table
+        global cut = CSV.read(filenamecut, DataFrame)  # CUT = Codon Usage Table
         for (aa, codons) in aa2codons
             # Build logical expression for each AA attending to codon redundancy
             #  e.g. for F/Phe: (dat.codon .== "TTT") .| (dat.codon .== "TTC")
@@ -82,8 +82,8 @@ struct Host{T<:Integer}
 end
 
 
-function optimize_codons(host, aa_seq::AbstractString)
-	return join([host.opt_codon[aa] for aa in aa_seq])
+function optimize_codons(myhost, aa_seq::AbstractString)
+	return join([myhost.opt_codon[aa] for aa in aa_seq])
 end
 
 end

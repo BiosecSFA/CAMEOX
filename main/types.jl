@@ -153,9 +153,11 @@ mutable struct wholeHMM
 	match_probs::Array{Float64, 2}
 end
 
-struct Paths #I/O paths.
+const Paths = @NamedTuple begin #I/O paths.
 	base::String
-	input::String 
+	input::String
+	energies::String
+	psls::String
 	output::String
 	entangle::String # Output path specific for the entanglement (with proteins and frame)
 end

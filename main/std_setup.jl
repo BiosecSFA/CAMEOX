@@ -73,10 +73,10 @@ function CAMEOX_main(x, x_prot, y, y_prot, frame, myhost, extra_out = false)
 	end
 end
 
-function align_consensus(prot_seq, hmm_file)
-	hmm_con = get_hmm_consensus(hmm_file)
+function align_consensus(prot_seq, hmm_path)
+	hmm_con = get_hmm_consensus(hmm_path)
 
-	alignment = read(pipeline(`printf ">pro_se\n$prot_seq\n"`, `hmmalign --outformat=A2M $hmm_file - `), String)
+	alignment = read(pipeline(`printf ">pro_se\n$prot_seq\n"`, `hmmalign --outformat=A2M $hmm_path - `), String)
 	alignment = join(split(alignment, '\n')[2:end], "")
 	alignment = fix_hmmalign(alignment, hmm_con)
 
@@ -177,9 +177,9 @@ function format_output_map(cur_seq, frame, deg_nuc, mark_nuc, deg_map, mark_map,
 	return final_deg, final_mark, final_seq, deg_trns, deg_trne, mark_trns, mark_trne
 end
 
-function NST_get_explicit_mapping(wt_seq, hmm_file)
+function NST_get_explicit_mapping(wt_seq, hmm_path)
 	#Returns a mapping from HMM nodes to position in a protein sequence.
-	prot_seq = align_consensus(wt_seq, hmm_file)
+	prot_seq = align_consensus(wt_seq, hmm_path)
 	mapping = Dict{Int64, Int64}()
 	cur_prot = 0
 	cur_hmm = 0
@@ -486,25 +486,25 @@ end
 
 function full_set_up(
     paths, mark_name, mark_hmm, mark_grem, deg_name, deg_hmm, deg_grem,
-    pop_size, num_samples, bad_threshold, rand_barcode, frame="p1",
-    host_tid=562; mark_range=nothing, deg_range=nothing, hmm_oversampling_rate=50)
+    pop_size, rand_barcode, frame="p1", host_tid=562;
+	mark_range=nothing, deg_range=nothing, hmm_oversampling_rate=50)
 
-    myhost = host.Host{Int64}(host_tid)
+    myhost = host.Host{Int64}(host_tid, paths.input)
     
 	if mark_range === nothing && deg_range === nothing
 		my_prots, real_frame = NST_full_general_main(
 			mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost,
 			pop_size * hmm_oversampling_rate, 0.90, 1.0, 1.0, 1200,
-			gen_hmm_trace(mark_name, mark_hmm, myhost, paths)...,
-			gen_hmm_trace(deg_name, deg_hmm, myhost, paths)...)
+			gen_hmm_trace(paths, mark_name, mark_hmm, myhost)...,
+			gen_hmm_trace(paths, deg_name, deg_hmm, myhost)...)
 		info("Evaluating $(length(my_prots)) HMM seeds (full genes)...")
 	else
 		my_sampled_prots, real_frame = NST_full_general_main_range(
 			mark_name, mark_hmm, deg_name, deg_hmm, frame, myhost,
 			pop_size * hmm_oversampling_rate, 0.90, 1.0, 1.0, 1200,
 			mark_range, deg_range,
-			gen_hmm_trace(mark_name, mark_hmm, myhost, paths)...,
-			gen_hmm_trace(deg_name, deg_hmm, myhost, paths)...)
+			gen_hmm_trace(paths, mark_name, mark_hmm, myhost)...,
+			gen_hmm_trace(paths, deg_name, deg_hmm, myhost)...)
 		info("Evaluating $(length(my_prots)) HMM seeds (ranges apply)...")
 	end	
 	@debug("std_setup:full_set_up(): We've generated samples.")

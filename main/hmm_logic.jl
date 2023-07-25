@@ -58,9 +58,9 @@ function hmm_get_consensus(hmm, hmm_length::Int)
 	return consensus
 end
 
-function create_HMM(file_name)
+function create_HMM(file_path)
 	#Extracts parameters from hmm files. Returns them to construct HMM objects.
-	in_file = open(file_name)
+	in_file = open(file_path)
 	in_read = readlines(in_file)
 	close(in_file)
 
@@ -157,8 +157,8 @@ function load_hmm_seq(prot_name, hmm, hmm_len, myhost)
 	return prot_dict, nucl_dict
 end
 
-function get_hmm_consensus(hmm_file) #NOTE: extra dependency (hmmemit)
-	hmm_con = read(`hmmemit -c $hmm_file`, String)
+function get_hmm_consensus(hmm_path) #NOTE: extra dependency (hmmemit)
+	hmm_con = read(`hmmemit -c $hmm_path`, String)
 	return join(split(hmm_con, '\n')[2:end], "")
 end
 
@@ -186,10 +186,6 @@ function get_tails(hmmalign) #HMM alignments sometimes struggle near end of sequ
 	return out_str
 end
 
-function get_consensus(hmm_file)
-	get_hmm_consensus(hmm_file)
-end
-
 function get_seqs(seq_keys, gene_name)
 	for k in seq_keys
 		if occursin("gene:$gene_name ", k)
@@ -199,20 +195,20 @@ function get_seqs(seq_keys, gene_name)
 	return "N/A"
 end
 
-function align_grem(gremlin_prot, hmm_file)
+function align_grem(gremlin_prot, hmm_path)
 	#This just aligns the HMM consensus with the MRF model. We do this to map between both sequence models.
 	#Often the HMM has more insertion points than the MRF since HMMs are better at handling insertions. MRFs we just prune nodes.
 	the_str = ">grem\n$gremlin_prot\n"
-	hmm_consensus = get_hmm_consensus(hmm_file)
-	hmm_out = read(pipeline(`printf "$the_str"`, `hmmalign --outformat A2M $hmm_file -`), String)
+	hmm_consensus = get_hmm_consensus(hmm_path)
+	hmm_out = read(pipeline(`printf "$the_str"`, `hmmalign --outformat A2M $hmm_path -`), String)
 	out_hmm = join(split(hmm_out, '\n')[2:end], "")
 	out_hmm = fix_hmmalign(out_hmm, hmm_consensus)
 	return out_hmm
 end
 
-function align_seq(seq_prot, hmm_file, hmm_consensus) #this function is very similar to last, slightly different input parameters.
+function align_seq(seq_prot, hmm_path, hmm_consensus) #this function is very similar to last, slightly different input parameters.
 	the_str = ">seq\n$seq_prot\n"
-	hmm_out = read(pipeline(`printf "$the_str"`, `hmmalign --outformat A2M $hmm_file -`), String)
+	hmm_out = read(pipeline(`printf "$the_str"`, `hmmalign --outformat A2M $hmm_path -`), String)
 	out_hmm = join(split(hmm_out, '\n')[2:end], "")
 	out_hmm = fix_hmmalign(out_hmm, hmm_consensus)
 	return out_hmm
@@ -366,7 +362,7 @@ function fix_hmmalign(hmmalign, hmm_consensus)
 	head_ali_top = collect(join([x for (x, _) in head_align]))
 	head_ali_bot = collect(join([x for (_, x) in head_align]))
 
-	for head_count in 1:length(head_ali_top)
+	for head_count in eachindex(head_ali_top)
 		if head_ali_bot[head_count] == '-'
 			head_ali_top[head_count] = lowercase(head_ali_top[head_count])
 		end
@@ -376,7 +372,7 @@ function fix_hmmalign(hmmalign, hmm_consensus)
 	tail_ali_top = collect(join([x for (x, _) in tail_align]))
 	tail_ali_bot = collect(join([x for (_, x) in tail_align]))
 
-	for tail_count in 1:length(tail_ali_top)
+	for tail_count in eachindex(tail_ali_top)
 		if tail_ali_bot[tail_count] == '-'
 			tail_ali_top[tail_count] = lowercase(tail_ali_top[tail_count])
 		end
@@ -405,7 +401,7 @@ end
 #Basically we also find it useful to trace the protein sequence to the hmm.
 #We want wild-type sequence for non-overlapping regions, and we want to align it to hmm because hmm is sort of our "base positioning"
 #of the models we're constructing.
-function gen_hmm_trace(gene_name, gene_hmm, myhost, paths)
+function gen_hmm_trace(paths, gene_name, gene_hmm, myhost)
 	cds_seqs = bio_seq.load_fasta(joinpath(paths.input, "cds.fasta"))
 	prot_seqs = bio_seq.load_fasta(joinpath(paths.input, "proteins.fasta"))
 
@@ -420,7 +416,7 @@ function gen_hmm_trace(gene_name, gene_hmm, myhost, paths)
         rethrow()
     end
 
-	hmm_consensus = get_consensus(gene_hmm)
+	hmm_consensus = get_hmm_consensus(gene_hmm)
 	hmm_align = align_seq(prot_seq, gene_hmm, hmm_consensus)
 
 	i_count = 1
@@ -509,7 +505,7 @@ function tail_prot_give_log_2d(hmm, prot, limit)
 	end
 	push!(sum_logs, sum_logs[limit-1] + state_probs(hmm, limit - 1)[1])
 	total = sum_logs[end]
-	return [total - sum_logs[y] for y in 1:length(sum_logs)]
+	return [total - sum_logs[y] for y in eachindex(sum_logs)]
 end
 
 function tail_prot_give_log(hmm, prot, limit)
@@ -520,5 +516,5 @@ function tail_prot_give_log(hmm, prot, limit)
 	end
 	push!(sum_logs, sum_logs[limit-1] + state_probs(hmm, limit - 1)[1])
 	total = sum_logs[end]
-	return [total - sum_logs[y] for y in 1:length(sum_logs)]
+	return [total - sum_logs[y] for y in eachindex(sum_logs)]
 end

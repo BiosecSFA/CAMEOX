@@ -13,7 +13,8 @@ include("optimize.jl")
 include("mrf.jl")
 include("bio_seq.jl")
 
-using ArgParse, Dates, Distributions, FileIO, JLD, Logging, Random, Statistics, StatsBase
+using ArgParse, Dates, Distributions, FileIO, JLD, Logging
+using Printf, Random, Statistics, StatsBase
 #using Gtk, Profile, ProfileView
 
 """
@@ -94,10 +95,11 @@ function set_up_and_optimize(
 	last_few_cs = Float64[]
 
 	#Looks up mean/std. dev of family pseudolikelihoods, pre-computed.
-	mu_mark, sig_mark = lookup.mu_sig(deg_name, normpath(paths.input, "psls/"))
-	mu_deg, sig_deg = lookup.mu_sig(mark_name, normpath(paths.input, "psls/"))
-
-	@debug("Stat param vars (mark / deg):\t$(mu_mark)\t$(sig_mark)\t$(mu_deg)\t$(sig_deg)")
+	mu_mark, sig_mark = lookup.mu_sig(paths, deg_name)
+	mu_deg, sig_deg = lookup.mu_sig(paths, mark_name)
+	@debug("APLL stats: mu_mark=$(@sprintf("%.2f", mu_mark)), " * 
+	 "sig_mark=$(@sprintf("%.2f", sig_mark)); mu_deg=$(@sprintf("%.2f", mu_deg)), " *
+	 "sig_deg=$(@sprintf("%.2f", sig_deg))")
 
 	# TODO: Expose gen_samples and candidate JLD file as input arguments
 	gen_samples = true #this is true if starting from scratch (general case), false if we have some candidates to optimize ahead of time (untested CAMEOS legacy).
@@ -230,8 +232,8 @@ function set_up_and_optimize(
 
 		#Okay let's set up the energy normal distributions...
 
-		deg_energy_mu, deg_energy_sig = lookup.get_energy_params(deg_name, "energies/")
-		mark_energy_mu, mark_energy_sig = lookup.get_energy_params(mark_name, "energies/")
+		deg_energy_mu, deg_energy_sig = lookup.get_energy_params(paths, deg_name)
+		mark_energy_mu, mark_energy_sig = lookup.get_energy_params(paths, mark_name)
 
 		mark_energy_normal = Normal(mark_energy_mu, mark_energy_sig)
 		deg_energy_normal = Normal(deg_energy_mu, deg_energy_sig)
@@ -550,7 +552,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.20 - Jul 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v0.21 - Jul 2022 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
@@ -624,8 +626,15 @@ function run_file()
 						run(`mkdir -p $entangle_path`)
 					end
 					debug > 0 && println("DEBUG: Entangle output path is $entangle_path")
-					# Define important paths in a Path object
-					paths = types.Paths(basedir, basedir, out_path, entangle_path)				
+					# Define important paths in a Path instance
+					paths = types.Paths((
+						base=basedir,
+						input=basedir,
+						energies=joinpath(basedir, "energies/"),
+						psls=joinpath(basedir, "psls/"),
+						output=out_path,
+						entangle=entangle_path
+						))				
 
 					log_path = joinpath(entangle_path, "log_$(rand_barcode).txt")
 					log_io = open(log_path, "w+")
@@ -639,8 +648,10 @@ function run_file()
 						rel_change_thr = parse(Float64, rel_change_thr)
 						set_up_and_optimize(log_io, rand_barcode, paths,
                                             short, long,
-                                            short_jld, long_jld,
-                                            short_hmm, long_hmm,
+                                            joinpath(paths.input, short_jld),
+											joinpath(paths.input, long_jld),
+											joinpath(paths.input, short_hmm),
+											joinpath(paths.input, long_hmm),
                                             pop_size, frame,
                                             rel_change_thr, unchanged_thr, max_iter,
 											mut_num, mut_len;
