@@ -1,1 +1,0 @@
-output/	aroB_pf5_uref100	infA_pf5_uref100	jlds/aroB_pf5_uref100.jld	jlds/infA_pf5_uref100.jld	hmms/aroB_pf5_uref100.hmm	hmms/infA_pf5_uref100.hmm	25000	p1	0	220664	rand

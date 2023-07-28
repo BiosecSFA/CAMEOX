@@ -2,7 +2,7 @@
 main : the code you run to double-encode... the "main loop" of optimization.
 """
 
-module main
+module CAMEOX
 
 include("utils.jl")
 include("types.jl")
@@ -516,7 +516,7 @@ function parse_commandline()
 		"--unchanged", "-u"
 			help = "contiguous iters without change to drop a seq from further optimization"
 			arg_type = Int
-			default = 500			
+			default = 1000			
 		"--nomrf"
 			help = "skip the MRF-based optimization"
 			action = :store_true		
@@ -552,7 +552,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v0.21 - Jul 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v1.0.alpha0 - Jul 2022 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()

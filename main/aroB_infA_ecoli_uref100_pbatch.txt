@@ -1,1 +1,0 @@
-output/	aroB_ecoli_uref100	infA_ecoli_uref100	jlds/aroB_ecoli_uref100.jld	jlds/infA_ecoli_uref100.jld	hmms/aroB_ecoli_uref100.hmm	hmms/infA_ecoli_uref100.hmm	20000	p1	0
