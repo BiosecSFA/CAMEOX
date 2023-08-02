@@ -1,4 +1,8 @@
-using JLD, HDF5, GZip, StatsBase, LinearAlgebra
+"""
+summarize: Energy and pseudologlikelihood summarization (prerequisite for CAMEOX)	
+"""
+
+using ArgParse, JLD, HDF5, GZip, StatsBase, LinearAlgebra
 
 function mylogsumexp(x)
 	X = maximum(x, dims = 2)
@@ -22,13 +26,15 @@ function convert_protein(prot_seq)
 end
 
 function compute_energies(prot_mat, w1, w2)
-	println("Computing energies")
+	println("Computing energies...")
+	flush(stdout)
 	energies = prot_mat * w1 + diag(prot_mat * w2 * prot_mat')
 	return energies #maybe this works?
 end
 
 function compute_psls(prot_mat, w1, w2, nNodes, nProt)
-	println("Computing pseudolikelihoods")
+	println("Computing pseudolikelihoods...")
+	flush(stdout)
 	my_pv_w2 = prot_mat * w2
 	my_ull = my_pv_w2 * prot_mat'
 	my_pv_w1 = prot_mat * w1
@@ -39,14 +45,14 @@ function compute_psls(prot_mat, w1, w2, nNodes, nProt)
 	return -all_scores
 end
 
-function save_energies(computed_energies, gene_name)
+function save_energies(computed_energies, gene_name, eng_path)
     local out_file
     try
-	    out_file = open("../main/energies/energy_$(gene_name).txt", "w")
+	    out_file = open(joinpath(eng_path, "energy_$(gene_name).txt"), "w")
     catch err
         if isa(err, SystemError)
             out_file = open("energy_$(gene_name).txt", "w")
-            println("Warning: writting energy output to working directory")
+            println("WARNING! Saving MRF energy output to working directory")
         else
             rethrow()
         end
@@ -58,14 +64,14 @@ function save_energies(computed_energies, gene_name)
     end
 end
 
-function save_psls(computed_psls, gene_name)
+function save_psls(computed_psls, gene_name, pll_path)
     local out_file
     try
-	    out_file = open("../main/psls/psls_$(gene_name).txt", "w")
+	    out_file = open(joinpath(pll_path, "psls_$(gene_name).txt"), "w")
     catch err
         if isa(err, SystemError)
             out_file = open("psls_$(gene_name).txt", "w")
-            println("Warning: writting pseudolhood output to working directory")
+            println("WARNING! Saving MRF pseudolikelihood output to working directory")
         else
             rethrow()
         end
@@ -77,8 +83,9 @@ function save_psls(computed_psls, gene_name)
     end  
 end
 
-function run(gene_name, jld_file, msa_file)
-	println("Reading msa file")
+function run(gene_name, jld_file, msa_file, base_dir)
+	println("Reading MSA file...")
+	flush(stdout)
 	in_file = open(msa_file)
 	in_read = readlines(in_file)
 	close(in_file)
@@ -97,7 +104,8 @@ function run(gene_name, jld_file, msa_file)
 		prot_mat[i_count, :] = convert_protein(seq)
 	end
 
-	println("Reading jld file")
+	println("Reading JLD file...")
+	flush(stdout)
 	mrf = load(jld_file)
 	w1 = mrf["w1"]
 	w2 = mrf["w2"]
@@ -106,26 +114,52 @@ function run(gene_name, jld_file, msa_file)
 	@time computed_psls = compute_psls(prot_mat, w1, w2, num_aa, num_prot)
 
 	#Write outputs to main directory.
-	println("Done. Saving energies/psls.")
+	println("Computing done! Saving energies/psls...")
+	flush(stdout)
 
-    save_energies(computed_energies, gene_name)
-    save_psls(computed_psls, gene_name)
+    save_energies(computed_energies, gene_name, joinpath(base_dir, "energies/"))
+    save_psls(computed_psls, gene_name, joinpath(base_dir, "psls/"))
 end
 
-function main()
-	prot_name = ARGS[end - 2]
-	prot_jld = ARGS[end - 1]
-	prot_msa = ARGS[end]
+function parse_commandline()
+	s = ArgParseSettings()
+	@add_arg_table s begin
+        "prot_name"
+		    help = "1st positional argument, name of gene"
+            arg_type = String
+        "prot_jld"
+		    help = "2nd positional argument, path to JLD file"
+            arg_type = String
+		"prot_msa"
+			help = "3rd positional argument, path to MSA (fasta) file"
+            arg_type = String
+		"base_dir"
+			help = "4th positional argument, path to base dir of energy and psls directories"
+            arg_type = String
+	end
+	return parse_args(s)
+end
+
+function summarize()
+	println("=-= summarize = energy and pll =-= v0.2 - Jul 2023 =-= LLNL =-=")
+	flush(stdout)
+	
+	# Parse arguments
+	parsed_args = parse_commandline()
+	prot_name = parsed_args["prot_name"]
+	prot_jld = parsed_args["prot_jld"]
+	prot_msa = parsed_args["prot_msa"]
+	base_dir = parsed_args["base_dir"]
 
 	if isfile(prot_msa)
 		if isfile(prot_jld) && endswith(prot_jld, ".jld")
-			run(prot_name, prot_jld, prot_msa)
+			run(prot_name, prot_jld, prot_msa, base_dir)
 		else
-			println("Something wrong with $prot_jld ... not a file or doesn't end with .jld")
+			println("ERROR! $prot_jld is not a file or doesn't end with required .jld")
 		end
 	else
-		println("$prot_msa is not a file.")
+		println("ERROR! $prot_msa is not a file.")
 	end
 end
 
-main()
+@time summarize()
