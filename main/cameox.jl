@@ -1,5 +1,5 @@
 """
-main : the code you run to double-encode... the "main loop" of optimization.
+CAMEOX : CAMEOs eXtended main module
 """
 
 module CAMEOX
@@ -552,7 +552,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v1.0.alpha0 - Jul 2022 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v1.0.0 - Jul 2023 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
