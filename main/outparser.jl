@@ -42,7 +42,7 @@ function parse_commandline()
 end
 
 function outparse_cameox()
-    println("=-= CAMEOX output parser =-= v0.10 - Jul 2023 =-= by LLNL =-=")
+    println("=-= CAMEOX output parser =-= v0.11 - Aug 2023 =-= LLNL =-=")
 
     # Parse arguments
    	parsed_args = parse_commandline()

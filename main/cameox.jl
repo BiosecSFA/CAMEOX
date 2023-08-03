@@ -21,8 +21,8 @@ using Printf, Random, Statistics, StatsBase
 Aux: Get a JLD saveable population of variants
 """
 function population_to_saveable(cur_pop;
-                                deg_wt_apll::Float32=0.0,
-								mark_wt_apll::Float32=0.0)
+                                deg_wt_apll::Float32=0.0f0,
+								mark_wt_apll::Float32=0.0f0)
 	new_pop = types.SaveChrome[]
 
 	for indiv in cur_pop
@@ -552,7 +552,7 @@ function parse_commandline()
 end
 
 function run_file()
-    println("=-= CAMEOX = CAMEOs eXtended =-= v1.0.0 - Jul 2023 =-= LLNL =-=")
+    println("=-= CAMEOX = CAMEOs eXtended =-= v1.0.1 - Aug 2023 =-= LLNL =-=")
 	flush(stdout)
 
 	parsed_args = parse_commandline()
@@ -686,7 +686,7 @@ const INI_TIME = now() # Initial time for elapsed time calculations
 @time run_file()
 
 #
-# Profiling 
+# Profiling (uncomment lines below if you are interested in profiling the code)
 #
 #@profile run_file()
 #open("CAMEOX_prof.txt", "w") do s
