@@ -2,7 +2,7 @@
 raw2jld: Convert CCMpred RAW file to JLD file (prerequisite for CAMEOX)	
 """
 
-using ArgParse, JLD, HDF5, GZip
+using ArgParse, JLD, HDF5
 
 function sub_read(w2::Array{Float64, 2}, co1::Int64, co2::Int64, cur_rows::Array{Float64, 2})
 	w2[1 + co1 * 21: (co1 + 1) * 21, 1 + co2 * 21: (co2 + 1) * 21] = cur_rows[1:end, 1:end]
@@ -59,15 +59,17 @@ function parse_commandline()
 		"raw_file"
 			help = "1st positional argument, path to CCMpred RAW file"
             arg_type = String
+			required = true
         "jld_file"
 		    help = "2nd positional argument, path to JLD file"
             arg_type = String
+			required = true
 	end
 	return parse_args(s)
 end
 
 function raw2jld()
-	println("=-= raw2jld = CCMpred RAW to JLD =-= v0.1 - Jul 2023 =-= LLNL =-=")
+	println("=-= raw2jld = CCMpred RAW to JLD =-= v0.2 - Aug 2023 =-= LLNL =-=")
 	flush(stdout)
 	
 	# Parse arguments

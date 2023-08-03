@@ -2,7 +2,7 @@
 summarize: Energy and pseudologlikelihood summarization (prerequisite for CAMEOX)	
 """
 
-using ArgParse, JLD, HDF5, GZip, StatsBase, LinearAlgebra
+using ArgParse, JLD, HDF5, StatsBase, LinearAlgebra
 
 function mylogsumexp(x)
 	X = maximum(x, dims = 2)
@@ -26,14 +26,14 @@ function convert_protein(prot_seq)
 end
 
 function compute_energies(prot_mat, w1, w2)
-	println("Computing energies...")
+	println("Computing energies, please wait...")
 	flush(stdout)
 	energies = prot_mat * w1 + diag(prot_mat * w2 * prot_mat')
 	return energies #maybe this works?
 end
 
 function compute_psls(prot_mat, w1, w2, nNodes, nProt)
-	println("Computing pseudolikelihoods...")
+	println("Computing pseudolikelihoods, please wait...")
 	flush(stdout)
 	my_pv_w2 = prot_mat * w2
 	my_ull = my_pv_w2 * prot_mat'
@@ -127,21 +127,25 @@ function parse_commandline()
         "prot_name"
 		    help = "1st positional argument, name of gene"
             arg_type = String
+			required = true
         "prot_jld"
 		    help = "2nd positional argument, path to JLD file"
             arg_type = String
+			required = true
 		"prot_msa"
 			help = "3rd positional argument, path to MSA (fasta) file"
             arg_type = String
+			required = true
 		"base_dir"
 			help = "4th positional argument, path to base dir of energy and psls directories"
             arg_type = String
+			required = true
 	end
 	return parse_args(s)
 end
 
 function summarize()
-	println("=-= summarize = energy and pll =-= v0.2 - Jul 2023 =-= LLNL =-=")
+	println("=-= summarize = Energy and PLL =-= v0.3 - Aug 2023 =-= LLNL =-=")
 	flush(stdout)
 	
 	# Parse arguments
