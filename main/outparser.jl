@@ -4,7 +4,7 @@ outparser: CAMEOX output parser
 
 using JLD # Should be placed here too to avoid later crash loading JLD file
 
-module main
+module outparse
 
 include("optimize.jl")
 include("types.jl") 
@@ -42,7 +42,7 @@ function parse_commandline()
 end
 
 function outparse_cameox()
-    println("=-= CAMEOX output parser =-= v0.11 - Aug 2023 =-= LLNL =-=")
+    println("=-= CAMEOX output parser =-= v0.12 - Aug 2023 =-= LLNL =-=")
 
     # Parse arguments
    	parsed_args = parse_commandline()
@@ -189,5 +189,5 @@ function outparse_cameox()
     end
 end
     
-@time outparse_cameos()
+@time outparse_cameox()
 end
