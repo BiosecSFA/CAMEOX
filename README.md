@@ -5,17 +5,28 @@ ___
 
 This repository contains code and data related to CAMEOX (CAMEOs eXtended), a parallelized extension of CAMEOS (Constraining Adaptive Mutations using Engineered Overlapping Sequences) developed by [LLNL (Lawrence Livermore National Laboratory)](https://www.llnl.gov/). The [original CAMEOS software](https://github.com/wanglabcumc/CAMEOS) was developed by Tom Blazejewski at [Wang Lab](http://wanglab.c2b2.columbia.edu/) (Columbia University). CAMEOX is the computational core of the [GENTANGLE pipeline](https://github.com/BiosecSFA/gentangle) for automated design of gene entanglements.
 
-## Improvements
+
+## Installation
+### As part of GENTANGLE
+The recommended installation way is as part of the GENTANGLE pipeline by cloning this repo's source code or, better, by downloading the Singularity container, as this eases the process of setting all the code and data dependencies and requirements of CAMEOX. Please see [this link](https://github.com/BiosecSFA/gentangle/tree/main#installation) for details on these approaches. 
+### Only CAMEOX source code
+```
+git clone https://github.com/BiosecSFA/cameox.git
+```
+
+## Details
+### Improvements
 
 The main improvements in CAMEOX relative to CAMEOS are:
- * Main optimization loop is parallelized using shared-memory threads.
+ * Main optimization loop is parallelized using shared-memory threads with optimized garbage collection on Julia.
  * Automatized stop of main loop by a dynamic condition based on the relative number of variants evolving per iteration.
  * Skipping variants because of past history over iterations and not “cull” because APLL (antipseudologlikelihood) limits.
  * Generalized embedded codon optimization by reading from external database.
+ * Ability to modify the mutagenesis parameters in the optimization algorithm.
  * Improve output with APLL for WT used in downstream normalization to enable comparisons.
  * Generation of comprehensive metadata file per entanglement pair.
 
-## Input format
+### Input format
 
 CAMEOX improvements over CAMEOS have required some changes in the TSV input/parameters file from column 7 regarding CAMEOS. Each line in the file should now have the following columns:
  1. Output dir: relative base directory where the output directory will be created.
@@ -42,7 +53,8 @@ Example with _Pseudomonas protegens_ Pf-5 (NCBI taxid: 220664) as host:
  * You will need to use the mark and deg genes names in the downstream pipeline.
 
 ## Further documentation
-* The original [CAMEOS manual](https://github.com/wanglabcumc/CAMEOS/blob/master/doc/manual.pdf) is an essential document.
+* Please see the [GENTANGLE wiki](https://github.com/BiosecSFA/gentangle/wiki) for useful documentation about the overal pipeline and container that include CAMEOX.
+* The original [CAMEOS manual](https://github.com/wanglabcumc/CAMEOS/blob/master/doc/manual.pdf) is an useful document.
 * For related code, data, documentation, and notebooks specific to Livermore Computing (LC) you can take a look at [this repo](https://github.com/BiosecSFA/LLNL).
 
 ## License
@@ -59,7 +71,7 @@ ___
 
 If you use CAMEOX in your research, please cite the following papers. Thanks!
 
-Allen JE, _et al._ **GENTANGLE: integrated computational design of gene entanglements**. _In preparation_. 2022. 
+Martí JM, _et al._ **GENTANGLE: integrated computational design of gene entanglements**. _In preparation_. 2023. 
 
 Blazejewski T, Ho HI, Wang HH. **Synthetic sequence entanglement augments stability and containment of genetic information in cells**. _Science_. 2019 Aug 9;365(6453):595-8. https://doi.org/10.1126/science.aav5477
 ___
